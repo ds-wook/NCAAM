@@ -22,7 +22,20 @@ def merge_data(df: pd.DataFrame) -> pd.DataFrame:
         scr_2, how="left", left_on=["Season", "TeamID2"], right_on=["Season", "TeamID"]
     )
     df = df.drop(["TeamID_x", "TeamID_y"], axis=1)
+    # df['win_pct_A_diff'] = df['win_pct_A_1'] - df['win_pct_A_2']
+    # df['win_pct_N_diff'] = df['win_pct_N_1'] - df['win_pct_N_2']
+    # df['win_pct_H_diff'] = df['win_pct_H_1'] - df['win_pct_H_2']
+    # df['win_pct_All_diff'] = df['win_pct_All_1'] - df['win_pct_All_2']
 
+    # df['Score_A_diff'] = df['Score_A_1'] - df['Score_A_2']
+    # df['Score_N_diff'] = df['Score_N_1'] - df['Score_N_2']
+    # df['Score_H_diff'] = df['Score_H_1'] - df['Score_H_2']
+    # df['Score_All_diff'] = df['Score_All_1'] - df['Score_All_2']
+
+    # df['relScore_A_diff'] = df['relScore_A_1'] - df['relScore_A_2']
+    # df['relScore_N_diff'] = df['relScore_N_1'] - df['relScore_N_2']
+    # df['relScore_H_diff'] = df['relScore_H_1'] - df['relScore_H_2']
+    df['relScore_All_diff'] = df['relScore_All_1'] - df['relScore_All_2']
     df = df.merge(
         dt_1, how="left", left_on=["Season", "TeamID1"], right_on=["Season", "TeamID"]
     )

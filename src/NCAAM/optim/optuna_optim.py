@@ -27,12 +27,13 @@ def objective(trial: Trial) -> float:
         "learning_rate": 0.05,
         "random_state": 42,
         "num_leaves": trial.suggest_int("num_leaves", 10, 100),
-        "reg_alpha": trial.suggest_loguniform("reg_alpha", 1e-3, 1.0),
-        "reg_lambda": trial.suggest_loguniform("reg_lambda", 1e-3, 1.0),
+        # "max_depth": trial.suggest_int("max_depth", 3, 12),
+        # "reg_alpha": trial.suggest_loguniform("reg_alpha", 1e-3, 1.0),
+        # "reg_lambda": trial.suggest_loguniform("reg_lambda", 1e-3, 1.0),
         "colsample_bytree": trial.suggest_uniform("colsample_bytree", 0.4, 1.0),
         "subsample": trial.suggest_uniform("subsample", 0.4, 1.0),
         "subsample_freq": trial.suggest_int("subsample_freq", 1, 7),
-        "min_child_samples": trial.suggest_int("min_child_samples", 10, 100),
+        # "min_child_samples": trial.suggest_int("min_child_samples", 10, 100),
     }
     model = LGBMClassifier(**params)
     model.fit(
@@ -45,4 +46,3 @@ def objective(trial: Trial) -> float:
     preds = model.predict_proba(X_valid, num_iteration=model.best_iteration_)[:, 1]
     loss = log_loss(y_valid, preds)
     return loss
-

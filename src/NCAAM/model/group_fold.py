@@ -13,7 +13,7 @@ def group_kfold_model(
     target: pd.Series,
     test: pd.DataFrame,
 ) -> np.ndarray:
-    folds = GroupKFold(n_splits=n_fold, random_state=42)
+    folds = GroupKFold(n_splits=n_fold)
     splits = folds.split(train, target, group)
     y_preds = np.zeros(test.shape[0])
     oof_preds = np.zeros(train.shape[0])
