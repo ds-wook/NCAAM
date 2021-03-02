@@ -34,11 +34,13 @@ def kfold_model(
     for season in seasons[fold:]:
         if verbose:
             print(f"\n Validating on season {season}")
+
         df_train = df[df["Season"] < season].reset_index(drop=True).copy()
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
         df_test = df_test_.copy()
 
         df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
+
         lgb_params = {
             "num_leaves": 65,
             "colsample_bytree": 0.6432045758305666,
@@ -47,7 +49,7 @@ def kfold_model(
         }
         lgb_params["objective"] = "binary"
         lgb_params["boosting_type"] = "gbdt"
-        lgb_params["n_estimators"] = 30000
+        lgb_params["n_estimators"] = 20000
         lgb_params["learning_rate"] = 0.05
         lgb_params["random_state"] = 42
 
@@ -70,11 +72,15 @@ def kfold_model(
 
         if df_test is not None:
             pred_test = model.predict_proba(df_test[features])[:, 1]
+
         pred_tests.append(pred_test)
         loss = log_loss(df_val[target].values, pred)
         cvs.append(loss)
+
         if verbose:
             print(f"\t -> Scored {loss:.3f}")
+
     print(f"\n Local CV is {np.mean(cvs):.3f}")
+
     pred_test = np.mean(pred_tests, 0)
     return pred_test

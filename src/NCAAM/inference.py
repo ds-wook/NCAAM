@@ -3,21 +3,6 @@ import argparse
 from data.dataset import load_dataset
 from model.cv_fold import kfold_model
 
-features = [
-    "SeedA",
-    "SeedB",
-    "WinRatioA",
-    "GapAvgA",
-    "WinRatioB",
-    "GapAvgB",
-    "OrdinalRankA",
-    "OrdinalRankB",
-    "SeedDiff",
-    "OrdinalRankDiff",
-    "WinRatioDiff",
-    "GapAvgDiff",
-]
-target = "WinA"
 df, df_test = load_dataset()
 
 if __name__ == "__main__":

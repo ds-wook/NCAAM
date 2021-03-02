@@ -314,4 +314,5 @@ def load_dataset() -> Tuple[pd.DataFrame, pd.DataFrame]:
     df_test["OrdinalRankDiff"] = df_test["OrdinalRankA"] - df_test["OrdinalRankB"]
     df_test["WinRatioDiff"] = df_test["WinRatioA"] - df_test["WinRatioB"]
     df_test["GapAvgDiff"] = df_test["GapAvgA"] - df_test["GapAvgB"]
+
     return df, df_test
