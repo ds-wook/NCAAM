@@ -4,7 +4,7 @@ from lightgbm import LGBMClassifier
 from sklearn.metrics import log_loss
 
 from data.dataset import load_dataset
-from data.fea_eng import rescale
+from data.fea_eng import quantile_transformer_scaler
 
 features = [
     "SeedA",
@@ -35,12 +35,12 @@ def objective(trial: Trial) -> float:
         "learning_rate": 0.05,
         "random_state": 42,
         "num_leaves": trial.suggest_int("num_leaves", 10, 100),
-        # "reg_alpha": trial.suggest_loguniform("reg_alpha", 1e-3, 1.0),
-        # "reg_lambda": trial.suggest_loguniform("reg_lambda", 1e-3, 1.0),
+        "reg_alpha": trial.suggest_loguniform("reg_alpha", 1e-3, 1.0),
+        "reg_lambda": trial.suggest_loguniform("reg_lambda", 1e-3, 1.0),
         "colsample_bytree": trial.suggest_uniform("colsample_bytree", 0.4, 1.0),
         "subsample": trial.suggest_uniform("subsample", 0.4, 1.0),
         "subsample_freq": trial.suggest_int("subsample_freq", 1, 7),
-        # "min_child_samples": trial.suggest_int("min_child_samples", 10, 100),
+        "min_child_samples": trial.suggest_int("min_child_samples", 10, 100),
     }
     seasons = df["Season"].unique()
     cvs = []
@@ -49,7 +49,9 @@ def objective(trial: Trial) -> float:
     for season in seasons[12:]:
         df_train = df[df["Season"] < season].reset_index(drop=True).copy()
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
-        df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
+        df_train, df_val, df_test = quantile_transformer_scaler(
+            features, df_train, df_val, df_test
+        )
 
         model = LGBMClassifier(**params)
         model.fit(
@@ -69,7 +71,9 @@ def objective(trial: Trial) -> float:
         )[:, 1]
 
         if df_test is not None:
-            pred_test = model.predict_proba(df_test[features])[:, 1]
+            pred_test = model.predict_proba(
+                df_test[features], num_iteration=model.best_iteration_
+            )[:, 1]
         pred_tests.append(pred_test)
         loss = log_loss(df_val[target].values, pred)
         cvs.append(loss)

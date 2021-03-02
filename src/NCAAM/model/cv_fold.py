@@ -5,7 +5,7 @@ import pandas as pd
 from sklearn.metrics import log_loss
 from lightgbm import LGBMClassifier
 
-from data.fea_eng import rescale
+from data.fea_eng import maxabs_scaler
 
 features = [
     "SeedA",
@@ -39,14 +39,16 @@ def kfold_model(
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
         df_test = df_test_.copy()
 
-        df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
+        df_train, df_val, df_test = maxabs_scaler(features, df_train, df_val, df_test)
 
         lgb_params = {
-            "num_leaves": 65,
-            "colsample_bytree": 0.6432045758305666,
-            "subsample": 0.5733933267821268,
-            "subsample_freq": 1,
+            "num_leaves": 100,
+            "colsample_bytree": 0.4712786502254102,
+            "subsample": 0.7215757617331042,
+            "subsample_freq": 4,
+            "min_child_samples": 86,
         }
+
         lgb_params["objective"] = "binary"
         lgb_params["boosting_type"] = "gbdt"
         lgb_params["n_estimators"] = 20000
@@ -71,16 +73,18 @@ def kfold_model(
         )[:, 1]
 
         if df_test is not None:
-            pred_test = model.predict_proba(df_test[features])[:, 1]
+            pred_test = model.predict_proba(
+                df_test[features], num_iteration=model.best_iteration_
+            )[:, 1]
 
         pred_tests.append(pred_test)
         loss = log_loss(df_val[target].values, pred)
         cvs.append(loss)
 
         if verbose:
-            print(f"\t -> Scored {loss:.3f}")
+            print(f"\t -> Scored {loss:.5f}")
 
-    print(f"\n Local CV is {np.mean(cvs):.3f}")
+    print(f"\n Local CV is {np.mean(cvs):.5f}")
 
     pred_test = np.mean(pred_tests, 0)
     return pred_test

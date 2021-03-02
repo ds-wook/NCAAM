@@ -1,6 +1,9 @@
 import re
 
 import pandas as pd
+from sklearn.preprocessing import MaxAbsScaler, StandardScaler, QuantileTransformer
+
+from typing import List, Tuple
 
 
 def get_round(day: int) -> int:
@@ -69,7 +72,12 @@ def add_loosing_matches(win_df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([win_df, lose_df], 0, sort=False)
 
 
-def rescale(features, df_train, df_val, df_test=None):
+def rescale(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     min_ = df_train[features].min()
     max_ = df_train[features].max()
 
@@ -78,5 +86,57 @@ def rescale(features, df_train, df_val, df_test=None):
 
     if df_test is not None:
         df_test[features] = (df_test[features] - min_) / (max_ - min_)
+
+    return df_train, df_val, df_test
+
+
+def maxabs_scaler(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    max_abs = MaxAbsScaler()
+
+    df_train[features] = max_abs.fit_transform(df_train[features])
+    df_val[features] = max_abs.fit_transform(df_val[features])
+
+    if df_test is not None:
+        df_test[features] = max_abs.fit_transform(df_test[features])
+
+    return df_train, df_val, df_test
+
+
+def standard_scaler(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    standard_scaler = StandardScaler()
+
+    df_train[features] = standard_scaler.fit_transform(df_train[features])
+    df_val[features] = standard_scaler.fit_transform(df_val[features])
+
+    if df_test is not None:
+        df_test[features] = standard_scaler.fit_transform(df_test[features])
+
+    return df_train, df_val, df_test
+
+
+def quantile_transformer_scaler(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+
+    quantile_transformer = QuantileTransformer()
+
+    df_train[features] = quantile_transformer.fit_transform(df_train[features])
+    df_val[features] = quantile_transformer.fit_transform(df_val[features])
+
+    if df_test is not None:
+        df_test[features] = quantile_transformer.fit_transform(df_test[features])
 
     return df_train, df_val, df_test

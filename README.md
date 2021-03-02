@@ -11,3 +11,4 @@ I follow [black](https://pypi.org/project/black/) for code style. Black is a PEP
 |------|:---------:|:--------:|:--------:|
 |LGBM optuna(4 params)|0.5134|0.41899|-|
 |LGBM optuna(7 params)|0.5261|0.49364|-|
+|LGBM - MaxAbs(6 params)|0.51270|0.50479|-|
