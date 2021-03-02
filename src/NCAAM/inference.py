@@ -1,10 +1,5 @@
 import argparse
 
-import numpy as np
-import pandas as pd
-from sklearn.metrics import log_loss
-from lightgbm import LGBMClassifier
-
 from data.dataset import load_dataset
 from model.cv_fold import kfold_model
 
