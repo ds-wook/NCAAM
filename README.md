@@ -13,12 +13,3 @@ I follow [black](https://pypi.org/project/black/) for code style. Black is a PEP
 |Cat bayesian_optim|-|-|-|-|
 |LGBM optuna|-|-|-|-|
 |XGB optuna|-|-|-|-|
-
-
-#### Gaussian Hyper Parameter Tunning
-|method|baseline|OOF(5-fold)| Public LB|Private LB|
-|------|:------:|:---------:|:--------:|:--------:|
-|LGBM bayesian_optim|-|-|-|-|
-|Cat bayesian_optim|-|-|-|-|
-|LGBM optuna|-|-|-|-|
-|XGB optuna|-|-|-|-|

@@ -1,10 +1,10 @@
+from typing import List
+
 import numpy as np
-
-from optuna.trial import Trial
-from lightgbm import LGBMClassifier
+import pandas as pd
 from sklearn.metrics import log_loss
+from lightgbm import LGBMClassifier
 
-from data.dataset import load_dataset
 from data.fea_eng import rescale
 
 features = [
@@ -23,36 +23,36 @@ features = [
 ]
 target = "WinA"
 
-df, df_test = load_dataset()
 
-
-def objective(trial: Trial) -> float:
-    global df, df_test
-    params = {
-        "objective": "binary",
-        "metric": "binary_logloss",
-        "boosting_type": "gbdt",
-        "n_estimators": 20000,
-        "learning_rate": 0.05,
-        "random_state": 42,
-        "num_leaves": trial.suggest_int("num_leaves", 10, 100),
-        "reg_alpha": trial.suggest_loguniform("reg_alpha", 1e-3, 1.0),
-        "reg_lambda": trial.suggest_loguniform("reg_lambda", 1e-3, 1.0),
-        "colsample_bytree": trial.suggest_uniform("colsample_bytree", 0.4, 1.0),
-        "subsample": trial.suggest_uniform("subsample", 0.4, 1.0),
-        "subsample_freq": trial.suggest_int("subsample_freq", 1, 7),
-        "min_child_samples": trial.suggest_int("min_child_samples", 10, 100),
-    }
+def kfold_model(
+    df: pd.DataFrame, df_test_: pd.DataFrame = None, verbose: int = 0
+) -> List[float]:
     seasons = df["Season"].unique()
     cvs = []
     pred_tests = []
 
     for season in seasons[10:]:
+        if verbose:
+            print(f"\n Validating on season {season}")
         df_train = df[df["Season"] < season].reset_index(drop=True).copy()
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
+        df_test = df_test_.copy()
+
         df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
 
-        model = LGBMClassifier(**params)
+        lgb_params = {
+            "num_leaves": 95,
+            "colsample_bytree": 0.7709990285051873,
+            "subsample": 0.43346250307918005,
+            "subsample_freq": 2,
+        }
+        lgb_params["objective"] = "binary"
+        lgb_params["boosting"] = "gbdt"
+        lgb_params["n_estimators"] = 20000
+        lgb_params["learning_rate"] = 0.05
+        lgb_params["random_state"] = 42
+
+        model = LGBMClassifier(**lgb_params)
         model.fit(
             df_train[features],
             df_train[target],
@@ -74,5 +74,8 @@ def objective(trial: Trial) -> float:
         pred_tests.append(pred_test)
         loss = log_loss(df_val[target].values, pred)
         cvs.append(loss)
-        loss = np.mean(cvs)
-    return loss
+        if verbose:
+            print(f"\t -> Scored {loss:.3f}")
+    print(f"\n Local CV is {np.mean(cvs):.3f}")
+    pred_test = np.mean(pred_tests, 0)
+    return pred_test

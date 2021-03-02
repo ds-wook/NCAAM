@@ -1,83 +1,82 @@
-from typing import Tuple
+import re
 
-import numpy as np
 import pandas as pd
 
-from data.dataset import wl_1, wl_2, scr_1, scr_2, dt_1, dt_2, MOR_1, MOR_2, path
+
+def get_round(day: int) -> int:
+    round_dic = {
+        134: 0,
+        135: 0,
+        136: 1,
+        137: 1,
+        138: 2,
+        139: 2,
+        143: 3,
+        144: 3,
+        145: 4,
+        146: 4,
+        152: 5,
+        154: 6,
+    }
+    try:
+        return round_dic[day]
+    except KeyError:
+        print(f"Unknow day : {day}")
+        return 0
 
 
-def merge_data(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.merge(
-        wl_1, how="left", left_on=["Season", "TeamID1"], right_on=["Season", "TeamID"]
-    )
-    df = df.merge(
-        wl_2, how="left", left_on=["Season", "TeamID2"], right_on=["Season", "TeamID"]
-    )
-    df = df.drop(["TeamID_x", "TeamID_y"], axis=1)
-
-    df = df.merge(
-        scr_1, how="left", left_on=["Season", "TeamID1"], right_on=["Season", "TeamID"]
-    )
-    df = df.merge(
-        scr_2, how="left", left_on=["Season", "TeamID2"], right_on=["Season", "TeamID"]
-    )
-    df = df.drop(["TeamID_x", "TeamID_y"], axis=1)
-
-    df = df.merge(
-        dt_1, how="left", left_on=["Season", "TeamID1"], right_on=["Season", "TeamID"]
-    )
-    df = df.merge(
-        dt_2, how="left", left_on=["Season", "TeamID2"], right_on=["Season", "TeamID"]
-    )
-    df = df.drop(["TeamID_x", "TeamID_y"], axis=1)
-
-    df = df.merge(
-        MOR_1, how="left", left_on=["Season", "TeamID1"], right_on=["Season", "TeamID"]
-    )
-    df = df.merge(
-        MOR_2, how="left", left_on=["Season", "TeamID2"], right_on=["Season", "TeamID"]
-    )
-    df = df.drop(["TeamID_x", "TeamID_y"], axis=1)
-
-    df["OrdinalRank_127_128_diff"] = (
-        df["OrdinalRank_127_128_1"] - df["OrdinalRank_127_128_2"]
-    )
-
-    df = df.fillna(-1)
-
-    for col in df.columns:
-        if (df[col] == np.inf).any() or (df[col] == -np.inf).any():
-            df[col][(df[col] == np.inf) | (df[col] == -np.inf)] = -1
-
-    return df
+def treat_seed(seed: int) -> int:
+    return int(re.sub("[^0-9]", "", seed))
 
 
-def train_test_dataset(
-    tourney: pd.DataFrame, stage: bool = True
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def add_loosing_matches(win_df: pd.DataFrame) -> pd.DataFrame:
+    win_rename = {
+        "WTeamID": "TeamIdA",
+        "WScore": "ScoreA",
+        "LTeamID": "TeamIdB",
+        "LScore": "ScoreB",
+        "SeedW": "SeedA",
+        "SeedL": "SeedB",
+        "WinRatioW": "WinRatioA",
+        "WinRatioL": "WinRatioB",
+        "GapAvgW": "GapAvgA",
+        "GapAvgL": "GapAvgB",
+        "OrdinalRankW": "OrdinalRankA",
+        "OrdinalRankL": "OrdinalRankB",
+    }
 
-    tourney = merge_data(tourney)
-    tourney = tourney.loc[tourney.Season >= 2003, :].reset_index(drop=True)
+    lose_rename = {
+        "WTeamID": "TeamIdB",
+        "WScore": "ScoreB",
+        "LTeamID": "TeamIdA",
+        "LScore": "ScoreA",
+        "SeedW": "SeedB",
+        "SeedL": "SeedA",
+        "GapAvgW": "GapAvgB",
+        "GapAvgL": "GapAvgA",
+        "WinRatioW": "WinRatioB",
+        "WinRatioL": "WinRatioA",
+        "OrdinalRankW": "OrdinalRankB",
+        "OrdinalRankL": "OrdinalRankA",
+    }
 
-    if stage:
-        tourney = tourney.loc[tourney.Season < 2015, :]
-        MSampleSubmission = pd.read_csv(path + "/MSampleSubmissionStage1.csv")
-    else:
-        MSampleSubmission = pd.read_csv(
-            path + None
-        )  # put stage 2 submission file link here
+    win_df = win_df.copy()
+    lose_df = win_df.copy()
 
-    test1 = MSampleSubmission.copy()
-    test1["Season"] = test1.ID.apply(lambda x: int(x[0:4]))
-    test1["TeamID1"] = test1.ID.apply(lambda x: int(x[5:9]))
-    test1["TeamID2"] = test1.ID.apply(lambda x: int(x[10:14]))
+    win_df = win_df.rename(columns=win_rename)
+    lose_df = lose_df.rename(columns=lose_rename)
 
-    test2 = MSampleSubmission.copy()
-    test2["Season"] = test2.ID.apply(lambda x: int(x[0:4]))
-    test2["TeamID1"] = test2.ID.apply(lambda x: int(x[10:14]))
-    test2["TeamID2"] = test2.ID.apply(lambda x: int(x[5:9]))
+    return pd.concat([win_df, lose_df], 0, sort=False)
 
-    test = pd.concat([test1, test2]).drop(["Pred"], axis=1)
-    test = merge_data(test)
 
-    return tourney, test
+def rescale(features, df_train, df_val, df_test=None):
+    min_ = df_train[features].min()
+    max_ = df_train[features].max()
+
+    df_train[features] = (df_train[features] - min_) / (max_ - min_)
+    df_val[features] = (df_val[features] - min_) / (max_ - min_)
+
+    if df_test is not None:
+        df_test[features] = (df_test[features] - min_) / (max_ - min_)
+
+    return df_train, df_val, df_test
