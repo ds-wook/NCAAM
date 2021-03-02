@@ -25,13 +25,13 @@ target = "WinA"
 
 
 def kfold_model(
-    df: pd.DataFrame, df_test_: pd.DataFrame = None, verbose: int = 0
+    fold: int, df: pd.DataFrame, df_test_: pd.DataFrame = None, verbose: int = 1
 ) -> List[float]:
     seasons = df["Season"].unique()
     cvs = []
     pred_tests = []
 
-    for season in seasons[10:]:
+    for season in seasons[fold:]:
         if verbose:
             print(f"\n Validating on season {season}")
         df_train = df[df["Season"] < season].reset_index(drop=True).copy()
@@ -39,16 +39,15 @@ def kfold_model(
         df_test = df_test_.copy()
 
         df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
-
         lgb_params = {
-            "num_leaves": 95,
-            "colsample_bytree": 0.7709990285051873,
-            "subsample": 0.43346250307918005,
-            "subsample_freq": 2,
+            "num_leaves": 65,
+            "colsample_bytree": 0.6432045758305666,
+            "subsample": 0.5733933267821268,
+            "subsample_freq": 1,
         }
         lgb_params["objective"] = "binary"
-        lgb_params["boosting"] = "gbdt"
-        lgb_params["n_estimators"] = 20000
+        lgb_params["boosting_type"] = "gbdt"
+        lgb_params["n_estimators"] = 30000
         lgb_params["learning_rate"] = 0.05
         lgb_params["random_state"] = 42
 

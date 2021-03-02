@@ -164,7 +164,26 @@ def load_dataset() -> Tuple[pd.DataFrame, pd.DataFrame]:
         )
         .drop(columns="TeamID", axis=1)
     )
-
+    df = (
+        pd.merge(
+            df,
+            df_features_season,
+            how="left",
+            left_on=["Season", "LTeamID"],
+            right_on=["Season", "TeamID"],
+        )
+        .rename(
+            columns={
+                "NumWins": "NumWinsL",
+                "NumLosses": "NumLossesL",
+                "GapWins": "GapWinsL",
+                "GapLosses": "GapLossesL",
+                "WinRatio": "WinRatioL",
+                "GapAvg": "GapAvgL",
+            }
+        )
+        .drop(columns="TeamID", axis=1)
+    )
     avg_ranking = df_massey.groupby(["Season", "TeamID"]).mean().reset_index()
 
     df = (
