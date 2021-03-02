@@ -7,9 +7,7 @@ I follow [black](https://pypi.org/project/black/) for code style. Black is a PEP
 ## Benchmark
 
 #### FE Hyper Parameter Tunning
-|method|baseline|OOF(5-fold)| Public LB|Private LB|
-|------|:------:|:---------:|:--------:|:--------:|
-|LGBM bayesian_optim|-|-|-|-|
-|Cat bayesian_optim|-|-|-|-|
-|LGBM optuna|-|-|-|-|
-|XGB optuna|-|-|-|-|
+|method|OOF(5-fold)|Public LB|Private LB|
+|------|:---------:|:--------:|:--------:|
+|LGBM optuna(4 params)|0.5134|0.41899|-|
+|LGBM optuna(7 params)|0.5261|0.49364|-|
