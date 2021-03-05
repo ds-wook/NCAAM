@@ -1,7 +1,12 @@
 import re
 
 import pandas as pd
-from sklearn.preprocessing import MaxAbsScaler, StandardScaler, QuantileTransformer
+from sklearn.preprocessing import (
+    MaxAbsScaler,
+    StandardScaler,
+    QuantileTransformer,
+    RobustScaler,
+)
 
 from typing import List, Tuple
 
@@ -102,7 +107,7 @@ def maxabs_scaler(
     df_val[features] = max_abs.fit_transform(df_val[features])
 
     if df_test is not None:
-        df_test[features] = max_abs.fit_transform(df_test[features])
+        df_test[features] = max_abs.transform(df_test[features])
 
     return df_train, df_val, df_test
 
@@ -119,7 +124,7 @@ def standard_scaler(
     df_val[features] = standard_scaler.fit_transform(df_val[features])
 
     if df_test is not None:
-        df_test[features] = standard_scaler.fit_transform(df_test[features])
+        df_test[features] = standard_scaler.transform(df_test[features])
 
     return df_train, df_val, df_test
 
@@ -137,6 +142,24 @@ def quantile_transformer_scaler(
     df_val[features] = quantile_transformer.fit_transform(df_val[features])
 
     if df_test is not None:
-        df_test[features] = quantile_transformer.fit_transform(df_test[features])
+        df_test[features] = quantile_transformer.transform(df_test[features])
+
+    return df_train, df_val, df_test
+
+
+def robust_transformer_scaler(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+
+    robust_scaler = RobustScaler()
+
+    df_train[features] = robust_scaler.fit_transform(df_train[features])
+    df_val[features] = robust_scaler.fit_transform(df_val[features])
+
+    if df_test is not None:
+        df_test[features] = robust_scaler.transform(df_test[features])
 
     return df_train, df_val, df_test
