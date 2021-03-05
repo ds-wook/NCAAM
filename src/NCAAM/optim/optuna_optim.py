@@ -50,7 +50,7 @@ def objective(
     cvs = []
     pred_tests = []
 
-    for season in seasons[14:]:
+    for season in seasons[12:]:
         df_train = df[df["Season"] < season].reset_index(drop=True).copy()
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
         df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
@@ -97,8 +97,8 @@ def xgb_objective(
         "n_estimators": 3000,
         "max_depth": trial.suggest_int("max_depth", 4, 20),
         "learning_rate": trial.suggest_float("learning_rate", 0.001, 1.0),
-        "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0),
-        "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0),
+        "reg_lambda": trial.suggest_loguniform("reg_lambda", 1e-3, 1.0),
+        "reg_alpha": trial.suggest_loguniform("reg_alpha", 1e-3, 1.0),
         "gamma": trial.suggest_float("gamma", 0.0, 10),
         "subsample": trial.suggest_categorical("subsample", [0.8, 0.9, 1.0]),
         "min_child_weight": trial.suggest_int("min_child_weight", 1, 300),
@@ -111,10 +111,10 @@ def xgb_objective(
     cvs = []
     pred_tests = []
 
-    for season in seasons[14:]:
+    for season in seasons[12:]:
         df_train = df[df["Season"] < season].reset_index(drop=True).copy()
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
-        df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
+        df_train, df_val, df_test = maxabs_scaler(features, df_train, df_val, df_test)
 
         model = XGBClassifier(**params)
         model.fit(

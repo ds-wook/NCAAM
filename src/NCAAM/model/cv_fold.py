@@ -110,14 +110,14 @@ def xgb_kfold_model(
         df_train, df_val, df_test = maxabs_scaler(features, df_train, df_val, df_test)
 
         xgb_params = {
-            "max_depth": 17,
-            "learning_rate": 0.2998036559586344,
-            "reg_lambda": 3.4863807958372117,
-            "reg_alpha": 0.5380496049743049,
-            "gamma": 1.2676788981943639,
-            "subsample": 0.8,
-            "min_child_weight": 31,
-            "colsample_bytree": 0.4,
+            "max_depth": 8,
+            "learning_rate": 0.4360801537132481,
+            "reg_lambda": 0.14140303701901955,
+            "reg_alpha": 0.02008569799354407,
+            "gamma": 1.1322274058019455,
+            "subsample": 0.9,
+            "min_child_weight": 27,
+            "colsample_bytree": 0.5,
         }
 
         xgb_params["objective"] = "binary:logistic"
