@@ -17,3 +17,5 @@ Black is a PEP 8 compliant opinionated formatter.
 |XGB optuna(6 params)|0.50106(3-fold)|0.48643|-|
 |XGB-MaxAbs optuna(6 params)|0.50106(3-fold)|0.48643|-|
 |XGB-robust optuna(8 params)|0.50313(3-fold)|0.50467|-|
+|XGB-nomalization optuna(8 params)|0.50652(5-fold)|0.49091|-|
+|XGB-nomalization optuna(8 params features)|0.49608(5-fold)|0.48286|-|

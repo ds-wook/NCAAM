@@ -5,17 +5,22 @@ from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
 from catboost import CatBoostClassifier
 
-from data.fea_eng import maxabs_scaler, robust_transformer_scaler, rescale
+from data.fea_eng import (
+    maxabs_scaler,
+    robust_transformer_scaler,
+    rescale,
+    normalization_scaler,
+)
 
 features = [
     "SeedA",
     "SeedB",
-    "WinRatioA",
+    # "WinRatioA",
     "GapAvgA",
-    "WinRatioB",
+    # "WinRatioB",
     "GapAvgB",
-    "OrdinalRankA",
-    "OrdinalRankB",
+    # "OrdinalRankA",
+    # "OrdinalRankB",
     "SeedDiff",
     "OrdinalRankDiff",
     "WinRatioDiff",
@@ -39,16 +44,18 @@ def lgb_kfold_model(
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
         df_test = df_test_.copy()
 
-        df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
+        df_train, df_val, df_test = normalization_scaler(
+            features, df_train, df_val, df_test
+        )
 
         lgb_params = {
-            "num_leaves": 46,
-            "reg_alpha": 0.004835967944598257,
-            "reg_lambda": 0.09941680956568132,
-            "colsample_bytree": 0.4813842319363184,
-            "subsample": 0.6502207469424413,
-            "subsample_freq": 6,
-            "min_child_samples": 30,
+            "num_leaves": 47,
+            "reg_alpha": 2.0322145576381225,
+            "reg_lambda": 1.4276863976112468,
+            "colsample_bytree": 0.8903033132580764,
+            "subsample": 0.46383593231999987,
+            "subsample_freq": 3,
+            "min_child_samples": 89,
         }
 
         lgb_params["objective"] = "binary"
@@ -107,23 +114,24 @@ def xgb_kfold_model(
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
         df_test = df_test_.copy()
 
-        df_train, df_val, df_test = maxabs_scaler(features, df_train, df_val, df_test)
+        df_train, df_val, df_test = normalization_scaler(
+            features, df_train, df_val, df_test
+        )
 
         xgb_params = {
-            "max_depth": 8,
-            "learning_rate": 0.4360801537132481,
-            "reg_lambda": 0.14140303701901955,
-            "reg_alpha": 0.02008569799354407,
-            "gamma": 1.1322274058019455,
-            "subsample": 0.9,
-            "min_child_weight": 27,
-            "colsample_bytree": 0.5,
+            "max_depth": 18,
+            "learning_rate": 0.5857698987440044,
+            "reg_lambda": 0.001180513673871078,
+            "reg_alpha": 0.42412647846599194,
+            "gamma": 3.3593638447345113,
+            "subsample": 0.4069684849403186,
+            "min_child_weight": 18,
+            "colsample_bytree": 0.2,
         }
-
         xgb_params["objective"] = "binary:logistic"
         xgb_params["eval_metric"] = "logloss"
         xgb_params["use_label_encoder"] = False
-        xgb_params["n_estimators"] = 3000
+        xgb_params["n_estimators"] = 30000
         xgb_params["random_state"] = 42
 
         model = XGBClassifier(**xgb_params)

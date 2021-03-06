@@ -6,6 +6,7 @@ from sklearn.preprocessing import (
     StandardScaler,
     QuantileTransformer,
     RobustScaler,
+    Normalizer,
 )
 
 from typing import List, Tuple
@@ -161,5 +162,23 @@ def robust_transformer_scaler(
 
     if df_test is not None:
         df_test[features] = robust_scaler.transform(df_test[features])
+
+    return df_train, df_val, df_test
+
+
+def normalization_scaler(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+
+    normalization = Normalizer()
+
+    df_train[features] = normalization.fit_transform(df_train[features])
+    df_val[features] = normalization.fit_transform(df_val[features])
+
+    if df_test is not None:
+        df_test[features] = normalization.transform(df_test[features])
 
     return df_train, df_val, df_test
