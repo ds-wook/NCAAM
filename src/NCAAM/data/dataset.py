@@ -1,352 +1,323 @@
+from typing import Tuple
+
+import numpy as np
 import pandas as pd
-
-path = "../../input/ncaam-march-mania-2021/"
-MRSCResults = pd.read_csv(path + "/MRegularSeasonCompactResults.csv")
-
-A_w = (
-    MRSCResults[MRSCResults.WLoc == "A"]
-    .groupby(["Season", "WTeamID"])["WTeamID"]
-    .count()
-    .to_frame()
-    .rename(columns={"WTeamID": "win_A"})
-)
-N_w = (
-    MRSCResults[MRSCResults.WLoc == "N"]
-    .groupby(["Season", "WTeamID"])["WTeamID"]
-    .count()
-    .to_frame()
-    .rename(columns={"WTeamID": "win_N"})
-)
-H_w = (
-    MRSCResults[MRSCResults.WLoc == "H"]
-    .groupby(["Season", "WTeamID"])["WTeamID"]
-    .count()
-    .to_frame()
-    .rename(columns={"WTeamID": "win_H"})
-)
-win = A_w.join(N_w, how="outer").join(H_w, how="outer").fillna(0)
-
-H_l = (
-    MRSCResults[MRSCResults.WLoc == "A"]
-    .groupby(["Season", "LTeamID"])["LTeamID"]
-    .count()
-    .to_frame()
-    .rename(columns={"LTeamID": "lost_H"})
-)
-N_l = (
-    MRSCResults[MRSCResults.WLoc == "N"]
-    .groupby(["Season", "LTeamID"])["LTeamID"]
-    .count()
-    .to_frame()
-    .rename(columns={"LTeamID": "lost_N"})
-)
-A_l = (
-    MRSCResults[MRSCResults.WLoc == "H"]
-    .groupby(["Season", "LTeamID"])["LTeamID"]
-    .count()
-    .to_frame()
-    .rename(columns={"LTeamID": "lost_A"})
-)
-lost = A_l.join(N_l, how="outer").join(H_l, how="outer").fillna(0)
-
-win.index = win.index.rename(["Season", "TeamID"])
-lost.index = lost.index.rename(["Season", "TeamID"])
-wl = win.join(lost, how="outer").reset_index()
-wl["win_pct_A"] = wl["win_A"] / (wl["win_A"] + wl["lost_A"])
-wl["win_pct_N"] = wl["win_N"] / (wl["win_N"] + wl["lost_N"])
-wl["win_pct_H"] = wl["win_H"] / (wl["win_H"] + wl["lost_H"])
-wl["win_pct_All"] = (wl["win_A"] + wl["win_N"] + wl["win_H"]) / (
-    wl["win_A"] + wl["win_N"] + wl["win_H"] + wl["lost_A"] + wl["lost_N"] + wl["lost_H"]
+from data.fea_eng import (
+    get_round,
+    treat_seed,
+    add_loosing_matches,
+    delete_leaked_from_df_train,
 )
 
-del A_w, N_w, H_w, H_l, N_l, A_l, win, lost
 
+def load_dataset() -> Tuple[pd.DataFrame, pd.DataFrame]:
+    path = "../../input/ncaam-march-mania-2021/"
 
-MRSCResults["relScore"] = MRSCResults.WScore - MRSCResults.LScore
+    df_seeds = pd.read_csv(path + "MNCAATourneySeeds.csv")
 
-w_scr = MRSCResults.loc[:, ["Season", "WTeamID", "WScore", "WLoc", "relScore"]]
-w_scr.columns = ["Season", "TeamID", "Score", "Loc", "relScore"]
-l_scr = MRSCResults.loc[:, ["Season", "LTeamID", "LScore", "WLoc", "relScore"]]
-l_scr["WLoc"] = l_scr.WLoc.apply(
-    lambda x: "H" if x == "A" else "A" if x == "H" else "N"
-)
-l_scr["relScore"] = -1 * l_scr.relScore
-l_scr.columns = ["Season", "TeamID", "Score", "Loc", "relScore"]
-wl_scr = pd.concat([w_scr, l_scr])
+    df_season_results = pd.read_csv(path + "MRegularSeasonCompactResults.csv")
+    df_season_results.drop(["NumOT", "WLoc"], axis=1, inplace=True)
+    df_season_results["ScoreGap"] = (
+        df_season_results["WScore"] - df_season_results["LScore"]
+    )
 
-A_scr = (
-    wl_scr[wl_scr.Loc == "A"]
-    .groupby(["Season", "TeamID"])[["Score", "relScore"]]
-    .mean()
-    .rename(columns={"Score": "Score_A", "relScore": "relScore_A"})
-)
-N_scr = (
-    wl_scr[wl_scr.Loc == "N"]
-    .groupby(["Season", "TeamID"])[["Score", "relScore"]]
-    .mean()
-    .rename(columns={"Score": "Score_N", "relScore": "relScore_N"})
-)
-H_scr = (
-    wl_scr[wl_scr.Loc == "H"]
-    .groupby(["Season", "TeamID"])[["Score", "relScore"]]
-    .mean()
-    .rename(columns={"Score": "Score_H", "relScore": "relScore_H"})
-)
-All_scr = (
-    wl_scr.groupby(["Season", "TeamID"])[["Score", "relScore"]]
-    .mean()
-    .rename(columns={"Score": "Score_All", "relScore": "relScore_All"})
-)
-scr = (
-    A_scr.join(N_scr, how="outer")
-    .join(H_scr, how="outer")
-    .join(All_scr, how="outer")
-    .fillna(0)
-    .reset_index()
-)
+    num_win = df_season_results.groupby(["Season", "WTeamID"]).count()
+    num_win = num_win.reset_index()[["Season", "WTeamID", "DayNum"]].rename(
+        columns={"DayNum": "NumWins", "WTeamID": "TeamID"}
+    )
 
-del w_scr, l_scr, wl_scr, A_scr, H_scr, N_scr, All_scr
+    num_loss = df_season_results.groupby(["Season", "LTeamID"]).count()
+    num_loss = num_loss.reset_index()[["Season", "LTeamID", "DayNum"]].rename(
+        columns={"DayNum": "NumLosses", "LTeamID": "TeamID"}
+    )
 
-MRSDetailedResults = pd.read_csv(path + "/MRegularSeasonDetailedResults.csv")
+    gap_win = df_season_results.groupby(["Season", "WTeamID"]).mean().reset_index()
+    gap_win = gap_win[["Season", "WTeamID", "ScoreGap"]].rename(
+        columns={"ScoreGap": "GapWins", "WTeamID": "TeamID"}
+    )
 
-w = MRSDetailedResults.loc[
-    :,
-    [
-        "Season",
-        "WTeamID",
-        "WFGM",
-        "WFGA",
-        "WFGM3",
-        "WFGA3",
-        "WFTM",
-        "WFTA",
-        "WOR",
-        "WDR",
-        "WAst",
-        "WTO",
-        "WStl",
-        "WBlk",
-        "WPF",
-    ],
-]
-w.columns = [
-    "Season",
-    "TeamID",
-    "FGM",
-    "FGA",
-    "FGM3",
-    "FGA3",
-    "FTM",
-    "FTA",
-    "OR",
-    "DR",
-    "Ast",
-    "TO",
-    "Stl",
-    "Blk",
-    "PF",
-]
-lo = MRSDetailedResults.loc[
-    :,
-    [
-        "Season",
-        "LTeamID",
-        "LFGM",
-        "LFGA",
-        "LFGM3",
-        "LFGA3",
-        "LFTM",
-        "LFTA",
-        "LOR",
-        "LDR",
-        "LAst",
-        "LTO",
-        "LStl",
-        "LBlk",
-        "LPF",
-    ],
-]
-lo.columns = [
-    "Season",
-    "TeamID",
-    "FGM",
-    "FGA",
-    "FGM3",
-    "FGA3",
-    "FTM",
-    "FTA",
-    "OR",
-    "DR",
-    "Ast",
-    "TO",
-    "Stl",
-    "Blk",
-    "PF",
-]
+    gap_loss = df_season_results.groupby(["Season", "LTeamID"]).mean().reset_index()
+    gap_loss = gap_loss[["Season", "LTeamID", "ScoreGap"]].rename(
+        columns={"ScoreGap": "GapLosses", "LTeamID": "TeamID"}
+    )
 
-detail = pd.concat([w, lo])
-detail["goal_rate"] = detail.FGM / detail.FGA
-detail["3p_goal_rate"] = detail.FGM3 / detail.FGA3
-detail["ft_goal_rate"] = detail.FTM / detail.FTA
+    df_features_season_w = (
+        df_season_results.groupby(["Season", "WTeamID"])
+        .count()
+        .reset_index()[["Season", "WTeamID"]]
+        .rename(columns={"WTeamID": "TeamID"})
+    )
+    df_features_season_l = (
+        df_season_results.groupby(["Season", "LTeamID"])
+        .count()
+        .reset_index()[["Season", "LTeamID"]]
+        .rename(columns={"LTeamID": "TeamID"})
+    )
 
-dt = (
-    detail.groupby(["Season", "TeamID"])[
-        [
-            "FGM",
-            "FGA",
-            "FGM3",
-            "FGA3",
-            "FTM",
-            "FTA",
-            "OR",
-            "DR",
-            "Ast",
-            "TO",
-            "Stl",
-            "Blk",
-            "PF",
-            "goal_rate",
-            "3p_goal_rate",
-            "ft_goal_rate",
-        ]
-    ]
-    .mean()
-    .fillna(0)
-    .reset_index()
-)
+    df_features_season = (
+        pd.concat([df_features_season_w, df_features_season_l], 0)
+        .drop_duplicates()
+        .sort_values(["Season", "TeamID"])
+        .reset_index(drop=True)
+    )
 
-del w, lo, detail
+    df_features_season = df_features_season.merge(
+        num_win, on=["Season", "TeamID"], how="left"
+    )
+    df_features_season = df_features_season.merge(
+        num_loss, on=["Season", "TeamID"], how="left"
+    )
+    df_features_season = df_features_season.merge(
+        gap_win, on=["Season", "TeamID"], how="left"
+    )
+    df_features_season = df_features_season.merge(
+        gap_loss, on=["Season", "TeamID"], how="left"
+    )
+    df_features_season.fillna(0, inplace=True)
 
-MMOrdinals = pd.read_csv(path + "/MMasseyOrdinals.csv")
+    df_features_season["WinRatio"] = df_features_season["NumWins"] / (
+        df_features_season["NumWins"] + df_features_season["NumLosses"]
+    )
 
-MOR_127_128 = MMOrdinals[
-    (MMOrdinals.SystemName == "MOR")
-    & ((MMOrdinals.RankingDayNum == 127) | (MMOrdinals.RankingDayNum == 128))
-][["Season", "TeamID", "OrdinalRank"]]
-MOR_50_51 = MMOrdinals[
-    (MMOrdinals.SystemName == "MOR")
-    & ((MMOrdinals.RankingDayNum == 50) | (MMOrdinals.RankingDayNum == 51))
-][["Season", "TeamID", "OrdinalRank"]]
-MOR_15_16 = MMOrdinals[
-    (MMOrdinals.SystemName == "MOR")
-    & ((MMOrdinals.RankingDayNum == 15) | (MMOrdinals.RankingDayNum == 16))
-][["Season", "TeamID", "OrdinalRank"]]
+    df_features_season["GapAvg"] = (
+        df_features_season["NumWins"] * df_features_season["GapWins"]
+        - df_features_season["NumLosses"] * df_features_season["GapLosses"]
+    ) / (df_features_season["NumWins"] + df_features_season["NumLosses"])
 
-MOR_127_128 = MOR_127_128.rename(columns={"OrdinalRank": "OrdinalRank_127_128"})
-MOR_50_51 = MOR_50_51.rename(columns={"OrdinalRank": "OrdinalRank_50_51"})
-MOR_15_16 = MOR_15_16.rename(columns={"OrdinalRank": "OrdinalRank_15_16"})
+    df_features_season.drop(
+        ["NumWins", "NumLosses", "GapWins", "GapLosses"], axis=1, inplace=True
+    )
+    df_tourney_results = pd.read_csv(path + "MNCAATourneyCompactResults.csv")
+    df_test = pd.read_csv(path + "MSampleSubmissionStage1.csv")
+    df_tourney_results.drop(["NumOT", "WLoc"], axis=1, inplace=True)
+    df_tourney_results["Round"] = df_tourney_results["DayNum"].apply(get_round)
 
-MOR = MOR_127_128.merge(MOR_50_51, how="left", on=["Season", "TeamID"]).merge(
-    MOR_15_16, how="left", on=["Season", "TeamID"]
-)
+    df_massey = pd.read_csv(path + "MMasseyOrdinals.csv")
+    df_massey = (
+        df_massey[df_massey["RankingDayNum"] == 133]
+        .drop("RankingDayNum", axis=1)
+        .reset_index(drop=True)
+    )  # use first day of the tournament
 
-# # normalizing Rank values by its season maxium as it varies by seasons
-MOR_max = (
-    MOR.groupby("Season")[
-        ["OrdinalRank_127_128", "OrdinalRank_50_51", "OrdinalRank_15_16"]
-    ]
-    .max()
-    .reset_index()
-)
-MOR_max.columns = ["Season", "maxRank_127_128", "maxRank_50_51", "maxRank_15_16"]
+    systems = []
+    for year in range(2003, 2019):
+        r = df_massey[df_massey["Season"] == year]
+        systems.append(r["SystemName"].unique())
 
-MOR_tmp = MMOrdinals[
-    (MMOrdinals.SystemName == "MOR") & (MMOrdinals.RankingDayNum < 133)
-]
-MOR_stats = (
-    MOR_tmp.groupby(["Season", "TeamID"])["OrdinalRank"]
-    .agg(["max", "min", "std", "mean"])
-    .reset_index()
-)
-MOR_stats.columns = ["Season", "TeamID", "RankMax", "RankMin", "RankStd", "RankMean"]
+    all_systems = list(set(list(np.concatenate(systems))))
 
-MOR = MOR.merge(MOR_max, how="left", on="Season").merge(
-    MOR_stats, how="left", on=["Season", "TeamID"]
-)
-MOR["OrdinalRank_127_128"] = MOR["OrdinalRank_127_128"] / MOR["maxRank_127_128"]
-MOR["OrdinalRank_50_51"] = MOR["OrdinalRank_50_51"] / MOR["maxRank_50_51"]
-MOR["OrdinalRank_15_16"] = MOR["OrdinalRank_15_16"] / MOR["maxRank_15_16"]
-MOR["RankTrans_50_51_to_127_128"] = (
-    MOR["OrdinalRank_127_128"] - MOR["OrdinalRank_50_51"]
-)
-MOR["RankTrans_15_16_to_127_128"] = (
-    MOR["OrdinalRank_127_128"] - MOR["OrdinalRank_15_16"]
-)
+    common_systems = []
+    # ['RTH', 'RPI', 'COL', 'AP', 'POM', 'USA', 'DOL', 'MOR', 'SAG', 'WOL', 'WLK']
+    for system in all_systems:
+        common = True
+        for system_years in systems:
+            if system not in system_years:
+                common = False
+        if common:
+            common_systems.append(system)
 
-# MOR['RankMax'] = MOR['RankMax'] / MOR['maxRank_127_128']
-# MOR['RankMin'] = MOR['RankMin'] / MOR['maxRank_127_128']
-# MOR['RankStd'] = MOR['RankStd'] / MOR['maxRank_127_128']
-# MOR['RankMean'] = MOR['RankMean'] / MOR['maxRank_127_128']
+    df_massey = df_massey[df_massey["SystemName"].isin(common_systems)].reset_index(
+        drop=True
+    )
 
-MOR.drop(
-    ["OrdinalRank_50_51", "OrdinalRank_15_16", "maxRank_50_51", "maxRank_15_16"],
-    axis=1,
-    inplace=True,
-)
+    df = df_tourney_results.copy()
+    df = df[df["Season"] >= 2003].reset_index(drop=True)
 
-del MOR_127_128, MOR_50_51, MOR_15_16, MOR_max, MOR_tmp, MOR_stats
+    df = (
+        pd.merge(
+            df,
+            df_seeds,
+            how="left",
+            left_on=["Season", "WTeamID"],
+            right_on=["Season", "TeamID"],
+        )
+        .drop("TeamID", axis=1)
+        .rename(columns={"Seed": "SeedW"})
+    )
 
-wl_1 = wl.loc[
-    :, ["Season", "TeamID", "win_pct_A", "win_pct_N", "win_pct_H", "win_pct_All"]
-]
-wl_1.columns = [
-    str(col) + "_1" if col not in ["Season", "TeamID"] else str(col)
-    for col in wl_1.columns
-]
+    df = (
+        pd.merge(
+            df,
+            df_seeds,
+            how="left",
+            left_on=["Season", "LTeamID"],
+            right_on=["Season", "TeamID"],
+        )
+        .drop("TeamID", axis=1)
+        .rename(columns={"Seed": "SeedL"})
+    )
 
-wl_2 = wl.loc[
-    :, ["Season", "TeamID", "win_pct_A", "win_pct_N", "win_pct_H", "win_pct_All"]
-]
-wl_2.columns = [
-    str(col) + "_2" if col not in ["Season", "TeamID"] else str(col)
-    for col in wl_2.columns
-]
+    df["SeedW"] = df["SeedW"].apply(treat_seed)
+    df["SeedL"] = df["SeedL"].apply(treat_seed)
 
-scr_1 = scr.copy()
-scr_1.columns = [
-    str(col) + "_1" if col not in ["Season", "TeamID"] else str(col)
-    for col in scr_1.columns
-]
+    df = (
+        pd.merge(
+            df,
+            df_features_season,
+            how="left",
+            left_on=["Season", "WTeamID"],
+            right_on=["Season", "TeamID"],
+        )
+        .rename(
+            columns={
+                "NumWins": "NumWinsW",
+                "NumLosses": "NumLossesW",
+                "GapWins": "GapWinsW",
+                "GapLosses": "GapLossesW",
+                "WinRatio": "WinRatioW",
+                "GapAvg": "GapAvgW",
+            }
+        )
+        .drop(columns="TeamID", axis=1)
+    )
+    df = (
+        pd.merge(
+            df,
+            df_features_season,
+            how="left",
+            left_on=["Season", "LTeamID"],
+            right_on=["Season", "TeamID"],
+        )
+        .rename(
+            columns={
+                "NumWins": "NumWinsL",
+                "NumLosses": "NumLossesL",
+                "GapWins": "GapWinsL",
+                "GapLosses": "GapLossesL",
+                "WinRatio": "WinRatioL",
+                "GapAvg": "GapAvgL",
+            }
+        )
+        .drop(columns="TeamID", axis=1)
+    )
+    avg_ranking = df_massey.groupby(["Season", "TeamID"]).mean().reset_index()
 
-scr_2 = scr.copy()
-scr_2.columns = [
-    str(col) + "_2" if col not in ["Season", "TeamID"] else str(col)
-    for col in scr_2.columns
-]
+    df = (
+        pd.merge(
+            df,
+            avg_ranking,
+            how="left",
+            left_on=["Season", "WTeamID"],
+            right_on=["Season", "TeamID"],
+        )
+        .drop("TeamID", axis=1)
+        .rename(columns={"OrdinalRank": "OrdinalRankW"})
+    )
 
-dt_1 = dt.copy()
-dt_1.columns = [
-    str(col) + "_1" if col not in ["Season", "TeamID"] else str(col)
-    for col in dt_1.columns
-]
+    df = (
+        pd.merge(
+            df,
+            avg_ranking,
+            how="left",
+            left_on=["Season", "LTeamID"],
+            right_on=["Season", "TeamID"],
+        )
+        .drop("TeamID", axis=1)
+        .rename(columns={"OrdinalRank": "OrdinalRankL"})
+    )
 
-dt_2 = dt.copy()
-dt_2.columns = [
-    str(col) + "_2" if col not in ["Season", "TeamID"] else str(col)
-    for col in dt_2.columns
-]
+    df = add_loosing_matches(df)
+    df["SeedDiff"] = df["SeedA"] - df["SeedB"]
+    df["OrdinalRankDiff"] = df["OrdinalRankA"] - df["OrdinalRankB"]
+    df["WinRatioDiff"] = df["WinRatioA"] - df["WinRatioB"]
+    df["GapAvgDiff"] = df["GapAvgA"] - df["GapAvgB"]
+    df["ScoreDiff"] = df["ScoreA"] - df["ScoreB"]
+    df["WinA"] = (df["ScoreDiff"] > 0).astype(int)
 
-MOR_1 = MOR.copy()
-MOR_1.columns = [
-    str(col) + "_1" if col not in ["Season", "TeamID"] else str(col)
-    for col in MOR_1.columns
-]
+    df_test["Season"] = df_test["ID"].apply(lambda x: int(x.split("_")[0]))
+    df_test["TeamIdA"] = df_test["ID"].apply(lambda x: int(x.split("_")[1]))
+    df_test["TeamIdB"] = df_test["ID"].apply(lambda x: int(x.split("_")[2]))
 
-MOR_2 = MOR.copy()
-MOR_2.columns = [
-    str(col) + "_2" if col not in ["Season", "TeamID"] else str(col)
-    for col in MOR_2.columns
-]
+    df_test = (
+        pd.merge(
+            df_test,
+            df_seeds,
+            how="left",
+            left_on=["Season", "TeamIdA"],
+            right_on=["Season", "TeamID"],
+        )
+        .drop("TeamID", axis=1)
+        .rename(columns={"Seed": "SeedA"})
+    )
+    df_test = (
+        pd.merge(
+            df_test,
+            df_seeds,
+            how="left",
+            left_on=["Season", "TeamIdB"],
+            right_on=["Season", "TeamID"],
+        )
+        .drop("TeamID", axis=1)
+        .rename(columns={"Seed": "SeedB"})
+    )
+    df_test["SeedA"] = df_test["SeedA"].apply(treat_seed)
+    df_test["SeedB"] = df_test["SeedB"].apply(treat_seed)
 
-TCResults = pd.read_csv(path + "/MNCAATourneyCompactResults.csv")
+    df_test = (
+        pd.merge(
+            df_test,
+            df_features_season,
+            how="left",
+            left_on=["Season", "TeamIdA"],
+            right_on=["Season", "TeamID"],
+        )
+        .rename(
+            columns={
+                "NumWins": "NumWinsA",
+                "NumLosses": "NumLossesA",
+                "GapWins": "GapWinsA",
+                "GapLosses": "GapLossesA",
+                "WinRatio": "WinRatioA",
+                "GapAvg": "GapAvgA",
+            }
+        )
+        .drop(columns="TeamID", axis=1)
+    )
+    df_test = (
+        pd.merge(
+            df_test,
+            df_features_season,
+            how="left",
+            left_on=["Season", "TeamIdB"],
+            right_on=["Season", "TeamID"],
+        )
+        .rename(
+            columns={
+                "NumWins": "NumWinsB",
+                "NumLosses": "NumLossesB",
+                "GapWins": "GapWinsB",
+                "GapLosses": "GapLossesB",
+                "WinRatio": "WinRatioB",
+                "GapAvg": "GapAvgB",
+            }
+        )
+        .drop(columns="TeamID", axis=1)
+    )
+    df_test = (
+        pd.merge(
+            df_test,
+            avg_ranking,
+            how="left",
+            left_on=["Season", "TeamIdA"],
+            right_on=["Season", "TeamID"],
+        )
+        .drop("TeamID", axis=1)
+        .rename(columns={"OrdinalRank": "OrdinalRankA"})
+    )
+    df_test = (
+        pd.merge(
+            df_test,
+            avg_ranking,
+            how="left",
+            left_on=["Season", "TeamIdB"],
+            right_on=["Season", "TeamID"],
+        )
+        .drop("TeamID", axis=1)
+        .rename(columns={"OrdinalRank": "OrdinalRankB"})
+    )
+    df_test["SeedDiff"] = df_test["SeedA"] - df_test["SeedB"]
+    df_test["OrdinalRankDiff"] = df_test["OrdinalRankA"] - df_test["OrdinalRankB"]
+    df_test["WinRatioDiff"] = df_test["WinRatioA"] - df_test["WinRatioB"]
+    df_test["GapAvgDiff"] = df_test["GapAvgA"] - df_test["GapAvgB"]
 
-tourney1 = TCResults.loc[:, ["Season", "WTeamID", "LTeamID"]]
-tourney1.columns = ["Season", "TeamID1", "TeamID2"]
-tourney1["result"] = 1
-
-tourney2 = TCResults.loc[:, ["Season", "LTeamID", "WTeamID"]]
-tourney2.columns = ["Season", "TeamID1", "TeamID2"]
-tourney2["result"] = 0
-
-tourney = pd.concat([tourney1, tourney2])
-del tourney1, tourney2
+    return df, df_test

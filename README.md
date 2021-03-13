@@ -9,5 +9,5 @@ I follow [black](https://pypi.org/project/black/) for code style. Black is a PEP
 #### TPE Hyper Parameter Tunning
 |method|baseline|OOF|Public LB|Private LB|
 |------|:------:|:---------:|:--------:|:--------:|
-|Non-LGBM optuna|0.55835|0.55575(5-fold)|0.52438|-|
+|Non-LGBM optuna|0.55109|0.56279(5-fold)|0.52438|-|
 |FE-LGB optuna|-|-|-|-|

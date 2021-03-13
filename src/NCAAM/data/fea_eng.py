@@ -1,96 +1,205 @@
-from typing import Tuple
+import re
 
-import numpy as np
 import pandas as pd
+from sklearn.preprocessing import (
+    MaxAbsScaler,
+    StandardScaler,
+    QuantileTransformer,
+    RobustScaler,
+    Normalizer,
+)
 
-from data.dataset import wl_1, wl_2, scr_1, scr_2, dt_1, dt_2, MOR_1, MOR_2, path
-
-
-def merge_data(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.merge(
-        wl_1, how="left", left_on=["Season", "TeamID1"], right_on=["Season", "TeamID"]
-    )
-    df = df.merge(
-        wl_2, how="left", left_on=["Season", "TeamID2"], right_on=["Season", "TeamID"]
-    )
-    df = df.drop(["TeamID_x", "TeamID_y"], axis=1)
-
-    df = df.merge(
-        scr_1, how="left", left_on=["Season", "TeamID1"], right_on=["Season", "TeamID"]
-    )
-    df = df.merge(
-        scr_2, how="left", left_on=["Season", "TeamID2"], right_on=["Season", "TeamID"]
-    )
-    df = df.drop(["TeamID_x", "TeamID_y"], axis=1)
-    # df['win_pct_A_diff'] = df['win_pct_A_1'] - df['win_pct_A_2']
-    # df['win_pct_N_diff'] = df['win_pct_N_1'] - df['win_pct_N_2']
-    # df['win_pct_H_diff'] = df['win_pct_H_1'] - df['win_pct_H_2']
-    # df['win_pct_All_diff'] = df['win_pct_All_1'] - df['win_pct_All_2']
-
-    # df['Score_A_diff'] = df['Score_A_1'] - df['Score_A_2']
-    # df['Score_N_diff'] = df['Score_N_1'] - df['Score_N_2']
-    # df['Score_H_diff'] = df['Score_H_1'] - df['Score_H_2']
-    # df['Score_All_diff'] = df['Score_All_1'] - df['Score_All_2']
-
-    # df['relScore_A_diff'] = df['relScore_A_1'] - df['relScore_A_2']
-    # df['relScore_N_diff'] = df['relScore_N_1'] - df['relScore_N_2']
-    # df['relScore_H_diff'] = df['relScore_H_1'] - df['relScore_H_2']
-    df['relScore_All_diff'] = df['relScore_All_1'] - df['relScore_All_2']
-    df = df.merge(
-        dt_1, how="left", left_on=["Season", "TeamID1"], right_on=["Season", "TeamID"]
-    )
-    df = df.merge(
-        dt_2, how="left", left_on=["Season", "TeamID2"], right_on=["Season", "TeamID"]
-    )
-    df = df.drop(["TeamID_x", "TeamID_y"], axis=1)
-
-    df = df.merge(
-        MOR_1, how="left", left_on=["Season", "TeamID1"], right_on=["Season", "TeamID"]
-    )
-    df = df.merge(
-        MOR_2, how="left", left_on=["Season", "TeamID2"], right_on=["Season", "TeamID"]
-    )
-    df = df.drop(["TeamID_x", "TeamID_y"], axis=1)
-
-    df["OrdinalRank_127_128_diff"] = (
-        df["OrdinalRank_127_128_1"] - df["OrdinalRank_127_128_2"]
-    )
-
-    df = df.fillna(-1)
-
-    for col in df.columns:
-        if (df[col] == np.inf).any() or (df[col] == -np.inf).any():
-            df[col][(df[col] == np.inf) | (df[col] == -np.inf)] = -1
-
-    return df
+from typing import List, Tuple
 
 
-def train_test_dataset(
-    tourney: pd.DataFrame, stage: bool = True
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def get_round(day: int) -> int:
+    round_dic = {
+        134: 0,
+        135: 0,
+        136: 1,
+        137: 1,
+        138: 2,
+        139: 2,
+        143: 3,
+        144: 3,
+        145: 4,
+        146: 4,
+        152: 5,
+        154: 6,
+    }
+    try:
+        return round_dic[day]
+    except KeyError:
+        print(f"Unknow day : {day}")
+        return 0
 
-    tourney = merge_data(tourney)
-    tourney = tourney.loc[tourney.Season >= 2003, :].reset_index(drop=True)
 
-    if stage:
-        tourney = tourney.loc[tourney.Season < 2015, :]
-        MSampleSubmission = pd.read_csv(path + "/MSampleSubmissionStage1.csv")
+def treat_seed(seed: int) -> int:
+    return int(re.sub("[^0-9]", "", seed))
+
+
+def add_loosing_matches(win_df: pd.DataFrame) -> pd.DataFrame:
+    win_rename = {
+        "WTeamID": "TeamIdA",
+        "WScore": "ScoreA",
+        "LTeamID": "TeamIdB",
+        "LScore": "ScoreB",
+        "SeedW": "SeedA",
+        "SeedL": "SeedB",
+        "WinRatioW": "WinRatioA",
+        "WinRatioL": "WinRatioB",
+        "GapAvgW": "GapAvgA",
+        "GapAvgL": "GapAvgB",
+        "OrdinalRankW": "OrdinalRankA",
+        "OrdinalRankL": "OrdinalRankB",
+    }
+
+    lose_rename = {
+        "WTeamID": "TeamIdB",
+        "WScore": "ScoreB",
+        "LTeamID": "TeamIdA",
+        "LScore": "ScoreA",
+        "SeedW": "SeedB",
+        "SeedL": "SeedA",
+        "GapAvgW": "GapAvgB",
+        "GapAvgL": "GapAvgA",
+        "WinRatioW": "WinRatioB",
+        "WinRatioL": "WinRatioA",
+        "OrdinalRankW": "OrdinalRankB",
+        "OrdinalRankL": "OrdinalRankA",
+    }
+
+    win_df = win_df.copy()
+    lose_df = win_df.copy()
+
+    win_df = win_df.rename(columns=win_rename)
+    lose_df = lose_df.rename(columns=lose_rename)
+
+    return pd.concat([win_df, lose_df], 0, sort=False)
+
+
+def rescale(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    min_ = df_train[features].min()
+    max_ = df_train[features].max()
+
+    df_train[features] = (df_train[features] - min_) / (max_ - min_)
+    df_val[features] = (df_val[features] - min_) / (max_ - min_)
+
+    if df_test is not None:
+        df_test[features] = (df_test[features] - min_) / (max_ - min_)
+
+    return df_train, df_val, df_test
+
+
+def maxabs_scaler(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    max_abs = MaxAbsScaler()
+
+    df_train[features] = max_abs.fit_transform(df_train[features])
+    df_val[features] = max_abs.fit_transform(df_val[features])
+
+    if df_test is not None:
+        df_test[features] = max_abs.transform(df_test[features])
+
+    return df_train, df_val, df_test
+
+
+def standard_scaler(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    standard_scaler = StandardScaler()
+
+    df_train[features] = standard_scaler.fit_transform(df_train[features])
+    df_val[features] = standard_scaler.fit_transform(df_val[features])
+
+    if df_test is not None:
+        df_test[features] = standard_scaler.transform(df_test[features])
+
+    return df_train, df_val, df_test
+
+
+def quantile_transformer_scaler(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+
+    quantile_transformer = QuantileTransformer()
+
+    df_train[features] = quantile_transformer.fit_transform(df_train[features])
+    df_val[features] = quantile_transformer.fit_transform(df_val[features])
+
+    if df_test is not None:
+        df_test[features] = quantile_transformer.transform(df_test[features])
+
+    return df_train, df_val, df_test
+
+
+def robust_transformer_scaler(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+
+    robust_scaler = RobustScaler()
+
+    df_train[features] = robust_scaler.fit_transform(df_train[features])
+    df_val[features] = robust_scaler.fit_transform(df_val[features])
+
+    if df_test is not None:
+        df_test[features] = robust_scaler.transform(df_test[features])
+
+    return df_train, df_val, df_test
+
+
+def normalization_scaler(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+
+    normalization = Normalizer()
+
+    df_train[features] = normalization.fit_transform(df_train[features])
+    df_val[features] = normalization.fit_transform(df_val[features])
+
+    if df_test is not None:
+        df_test[features] = normalization.transform(df_test[features])
+
+    return df_train, df_val, df_test
+
+
+def concat_row(r: pd.DataFrame) -> str:
+    if r["WTeamID"] < r["LTeamID"]:
+        res = str(r["Season"]) + "_" + str(r["WTeamID"]) + "_" + str(r["LTeamID"])
     else:
-        MSampleSubmission = pd.read_csv(
-            path + None
-        )  # put stage 2 submission file link here
+        res = str(r["Season"]) + "_" + str(r["LTeamID"]) + "_" + str(r["WTeamID"])
+    return res
 
-    test1 = MSampleSubmission.copy()
-    test1["Season"] = test1.ID.apply(lambda x: int(x[0:4]))
-    test1["TeamID1"] = test1.ID.apply(lambda x: int(x[5:9]))
-    test1["TeamID2"] = test1.ID.apply(lambda x: int(x[10:14]))
 
-    test2 = MSampleSubmission.copy()
-    test2["Season"] = test2.ID.apply(lambda x: int(x[0:4]))
-    test2["TeamID1"] = test2.ID.apply(lambda x: int(x[10:14]))
-    test2["TeamID2"] = test2.ID.apply(lambda x: int(x[5:9]))
+# Delete leaked from train
+def delete_leaked_from_df_train(
+    df_train: pd.DataFrame, df_test: pd.DataFrame
+) -> pd.DataFrame:
+    df_train["Concats"] = df_train.apply(concat_row, axis=1)
+    df_train_duplicates = df_train[df_train["Concats"].isin(df_test["ID"].unique())]
+    df_train_idx = df_train_duplicates.index.values
+    df_train = df_train.drop(df_train_idx)
+    df_train = df_train.drop("Concats", axis=1)
 
-    test = pd.concat([test1, test2]).drop(["Pred"], axis=1)
-    test = merge_data(test)
-
-    return tourney, test
+    return df_train
