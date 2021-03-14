@@ -4,20 +4,21 @@ from optuna.trial import Trial
 from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
 from sklearn.metrics import log_loss
+from sklearn.ensemble import RandomForestClassifier
 
 from data.dataset import load_dataset
-from data.fea_eng import normalization_scaler
+from data.fea_eng import normalization_scaler, rescale
 
 
 features = [
     "SeedA",
     "SeedB",
-    # "WinRatioA",
+    "WinRatioA",
     "GapAvgA",
-    # "WinRatioB",
+    "WinRatioB",
     "GapAvgB",
-    # "OrdinalRankA",
-    # "OrdinalRankB",
+    "OrdinalRankA",
+    "OrdinalRankB",
     "SeedDiff",
     "OrdinalRankDiff",
     "WinRatioDiff",
@@ -40,23 +41,21 @@ def objective(
         "learning_rate": 0.05,
         "random_state": 42,
         "num_leaves": trial.suggest_int("num_leaves", 10, 100),
-        "reg_alpha": trial.suggest_loguniform("reg_alpha", 1e-3, 10.0),
-        "reg_lambda": trial.suggest_loguniform("reg_lambda", 1e-3, 10.0),
+        # "reg_alpha": trial.suggest_loguniform("reg_alpha", 1e-3, 10.0),
+        # "reg_lambda": trial.suggest_loguniform("reg_lambda", 1e-3, 10.0),
         "colsample_bytree": trial.suggest_uniform("colsample_bytree", 0.4, 1.0),
         "subsample": trial.suggest_uniform("subsample", 0.4, 1.0),
         "subsample_freq": trial.suggest_int("subsample_freq", 1, 7),
         "min_child_samples": trial.suggest_int("min_child_samples", 10, 100),
     }
     seasons = df["Season"].unique()
-    cvs = []
+    cvs = np.array([])
     pred_tests = []
 
     for season in seasons[12:]:
         df_train = df[df["Season"] < season].reset_index(drop=True).copy()
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
-        df_train, df_val, df_test = normalization_scaler(
-            features, df_train, df_val, df_test
-        )
+        df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
 
         model = LGBMClassifier(**params)
         model.fit(
@@ -82,8 +81,10 @@ def objective(
 
         pred_tests.append(pred_test)
         loss = log_loss(df_val[target].values, pred)
-        cvs.append(loss)
-        loss = np.mean(cvs)
+        cvs = np.append(cvs, loss)
+
+    weights = np.array([0.1, 0.05, 0.2, 0.05, 0.7])
+    loss = np.sum(weights * cvs)
 
     return loss
 
@@ -100,8 +101,8 @@ def xgb_objective(
         "n_estimators": 3000,
         "max_depth": trial.suggest_int("max_depth", 4, 20),
         "learning_rate": trial.suggest_float("learning_rate", 0.001, 1.0),
-        "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 1.0),
-        "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 1.0),
+        # "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 1.0),
+        # "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 1.0),
         "gamma": trial.suggest_float("gamma", 0.0, 10),
         "subsample": trial.suggest_float("subsample", 0.0, 1),
         "min_child_weight": trial.suggest_int("min_child_weight", 1, 300),
@@ -131,6 +132,43 @@ def xgb_objective(
             early_stopping_rounds=100,
             verbose=False,
         )
+
+        pred = model.predict_proba(df_val[features])[:, 1]
+
+        if df_test is not None:
+            pred_test = model.predict_proba(df_test[features])[:, 1]
+
+        pred_tests.append(pred_test)
+        loss = log_loss(df_val[target].values, pred)
+        cvs.append(loss)
+        loss = np.mean(cvs)
+
+    return loss
+
+
+def forest_objective(
+    trial: Trial, df: pd.DataFrame = df, df_test: pd.DataFrame = df_test
+) -> float:
+
+    params = {
+        "n_estimators": trial.suggest_int("n_estimators", 10, 100),
+        "max_depth": trial.suggest_int("max_depth", 6, 12),
+        "min_samples_leaf": trial.suggest_int("min_samples_leaf", 8, 18),
+        "min_samples_split": trial.suggest_int("min_samples_split", 8, 20),
+    }
+
+    seasons = df["Season"].unique()
+    cvs = []
+    pred_tests = []
+
+    for season in seasons[12:]:
+        df_train = df[df["Season"] < season].reset_index(drop=True).copy()
+        df_val = df[df["Season"] == season].reset_index(drop=True).copy()
+        df_train, df_val, df_test = normalization_scaler(
+            features, df_train, df_val, df_test
+        )
+        model = RandomForestClassifier(**params)
+        model.fit(df_train[features], df_train[target])
 
         pred = model.predict_proba(df_val[features])[:, 1]
 
