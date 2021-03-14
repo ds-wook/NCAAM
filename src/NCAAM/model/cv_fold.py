@@ -31,15 +31,16 @@ def lgb_kfold_model(
     fold: int, df: pd.DataFrame, df_test_: pd.DataFrame = None, verbose: int = 1
 ) -> np.ndarray:
     seasons = df["Season"].unique()
-    weights = [0.44, 0.01, 0.55]
-    cvs = []
+    weights = np.array([0.05, 0.05, 0.25, 0.05, 0.6])
+    cvs = np.array([])
     pred_tests = np.zeros(df_test_.shape[0])
+
     lgb_params = {
-        "num_leaves": 45,
-        "colsample_bytree": 0.6686058563904441,
-        "subsample": 0.48584786601024926,
-        "subsample_freq": 6,
-        "min_child_samples": 34,
+        "num_leaves": 51,
+        "colsample_bytree": 0.8227597766170748,
+        "subsample": 0.6750591074719623,
+        "subsample_freq": 5,
+        "min_child_samples": 39,
     }
 
     lgb_params["objective"] = "binary"
@@ -56,9 +57,7 @@ def lgb_kfold_model(
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
         df_test = df_test_.copy()
 
-        df_train, df_val, df_test = normalization_scaler(
-            features, df_train, df_val, df_test
-        )
+        df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
 
         model = LGBMClassifier(**lgb_params)
         model.fit(
@@ -84,12 +83,12 @@ def lgb_kfold_model(
 
         pred_tests += weight * pred_test
         loss = log_loss(df_val[target].values, pred)
-        cvs.append(loss)
+        cvs = np.append(cvs, loss)
 
         if verbose:
             print(f"\t -> Scored {loss:.5f}")
 
-    print(f"\n Local CV is {np.mean(cvs):.5f}")
+    print(f"\n Local CV is {np.sum(weights * cvs):.5f}")
 
     # pred_test = np.mean(pred_tests, 0)
     return pred_tests
@@ -163,9 +162,9 @@ def logistic_kfold_model(
 ) -> np.ndarray:
     seasons = df["Season"].unique()
     cvs = []
-    pred_tests = []
-
-    for season in seasons[fold:]:
+    pred_tests = np.zeros(df_test_.shape[0])
+    weights = [0.1, 0.1, 0.1, 0.05, 0.65]
+    for season, weight in zip(seasons[fold:], weights):
         if verbose:
             print(f"\n Validating on season {season}")
 
@@ -175,7 +174,7 @@ def logistic_kfold_model(
 
         df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
 
-        model = LogisticRegression(C=6)
+        model = LogisticRegression(C=10)
         model.fit(df_train[features], df_train[target])
 
         pred = model.predict_proba(df_val[features])[:, 1]
@@ -183,7 +182,7 @@ def logistic_kfold_model(
         if df_test is not None:
             pred_test = model.predict_proba(df_test[features])[:, 1]
 
-        pred_tests.append(pred_test)
+        pred_tests += weight * pred_test
         loss = log_loss(df_val[target].values, pred)
         cvs.append(loss)
 
@@ -192,8 +191,7 @@ def logistic_kfold_model(
 
     print(f"\n Local CV is {np.mean(cvs):.5f}")
 
-    pred_test = np.mean(pred_tests, 0)
-    return pred_test
+    return pred_tests
 
 
 def knn_kfold_model(

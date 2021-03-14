@@ -26,7 +26,6 @@ if __name__ == "__main__":
     args = parse.parse_args()
     lgb_pred = lgb_kfold_model(args.fold, df, df_test)
     # xgb_pred = xgb_kfold_model(args.fold, df, df_test)
-
     sub = df_test[["ID", "Pred"]].copy()
     sub["Pred"] = lgb_pred
     sub.to_csv(args.path + args.file, index=False)
