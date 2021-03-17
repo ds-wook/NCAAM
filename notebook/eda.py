@@ -1,148 +1,523 @@
 # %%
 import numpy as np
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-import os
 
-path = "../input/ncaam-march-mania-2021/"
-
-for dirname, _, filenames in os.walk(path):
-    for filename in filenames:
-        print(os.path.join(dirname, filename))
-
-# %% [markdown]
-"""
-## Data Section 1 - The Basics
-### This section provides everything
-you need to build a simple prediction model and submit predictions.
-
-+ Team ID's and Team Names
-+ Tournament seeds since 1984-85 season
-+ Final scores of all regular season, conference tournament,
-and NCAA® tournament games since 1984-85 season
-+ Season-level details including dates and region names
-+ Example submission file for stage 1
-"""
-
-# %% [markdown]
-"""
-## Data Section 1 file: Teams.csv
-TeamID - a 4 digit id number, from 1000-1999,
-uniquely identifying each NCAA® men's team.
-TeamName - a compact spelling of the team's college name, 16 characters or fewer.
-FirstD1Season - the first season in our dataset that the school was a Division-I school.
-LastD1Season - the last season in our dataset that the school was a Division-I school.
-"""
-teams = pd.read_csv(path + "MTeams.csv")
-teams.head()
-# %%
-fig, axes = plt.subplots(2, 1, figsize=(15, 10))
-sns.countplot(ax=axes[0], data=teams, x="FirstD1Season")
-sns.countplot(ax=axes[1], data=teams, x="LastD1Season")
-plt.show()
-
-# %% [markdown]
-"""
-## Data Section 1 file: MSeasons.csv
-
-+ Season - indicates the year in which the tournament was played.
-+ DayZero - tells you the date corresponding to DayNum=0 during that season.
-All game dates have been aligned upon a common scale so that (each year)
-the Monday championship game of the men's tournament is on DayNum=154.
-+ RegionW, RegionX, Region Y, Region Z - by our contests' convention,
-each of the four regions in the final tournament is assigned a letter of W, X, Y, or Z.
-Whichever region's name comes first alphabetically, that region will be Region W.
-"""
-seasons = pd.read_csv(path + "MSeasons.csv")
-seasons.head()
-# %% [markdown]
-"""
-## Data Section 1 file: MRegularSeasonCompactResults.csv
-+ Season - this is the year of the associated entry in MSeasons.csv
-(the year in which the final tournament occurs).
-+ DayNum - this integer always ranges from 0 to 132,
-and tells you what day the game was played on.
-It represents an offset from the "DayZero" date in the "MSeasons.csv" file.
-+ WTeamID - this identifies the id number of the team that won the game,
-as listed in the "MTeams.csv" file.
-+ WScore - this identifies the number of points scored by the winning team.
-+ LTeamID - this identifies the id number of the team that lost the game.
-+ LScore - this identifies the number of points scored by the losing team.
-+ WLoc - this identifies the "location" of the winning team.
-If the winning team was the home team, this value will be "H".
-If the winning team was the visiting team, this value will be "A".
-If it was played on a neutral court, then this value will be "N".
-+ NumOT - this indicates the number of overtime periods in the game,
-an integer 0 or higher.
-"""
-MRegularSeasonCompactResults = pd.read_csv(path + "MRegularSeasonCompactResults.csv")
-MRegularSeasonCompactResults.head()
+from typing import List, Tuple
+import re
 
 # %%
-fig = plt.figure(figsize=(5, 5))
-sns.countplot(data=MRegularSeasonCompactResults, x="WLoc")
-plt.show()
+
+
+def get_round(day: int) -> int:
+    round_dic = {
+        134: 0,
+        135: 0,
+        136: 1,
+        137: 1,
+        138: 2,
+        139: 2,
+        143: 3,
+        144: 3,
+        145: 4,
+        146: 4,
+        152: 5,
+        154: 6,
+    }
+    try:
+        return round_dic[day]
+    except KeyError:
+        print(f"Unknow day : {day}")
+        return 0
+
+
+def treat_seed(seed: int) -> int:
+    return int(re.sub("[^0-9]", "", seed))
+
+
+def add_loosing_matches(win_df: pd.DataFrame) -> pd.DataFrame:
+    win_rename = {
+        "WTeamID": "TeamIdA",
+        "WScore": "ScoreA",
+        "LTeamID": "TeamIdB",
+        "LScore": "ScoreB",
+        "SeedW": "SeedA",
+        "SeedL": "SeedB",
+        "WinRatioW": "WinRatioA",
+        "WinRatioL": "WinRatioB",
+        "GapAvgW": "GapAvgA",
+        "GapAvgL": "GapAvgB",
+        "OrdinalRankW": "OrdinalRankA",
+        "OrdinalRankL": "OrdinalRankB",
+    }
+
+    lose_rename = {
+        "WTeamID": "TeamIdB",
+        "WScore": "ScoreB",
+        "LTeamID": "TeamIdA",
+        "LScore": "ScoreA",
+        "SeedW": "SeedB",
+        "SeedL": "SeedA",
+        "GapAvgW": "GapAvgB",
+        "GapAvgL": "GapAvgA",
+        "WinRatioW": "WinRatioB",
+        "WinRatioL": "WinRatioA",
+        "OrdinalRankW": "OrdinalRankB",
+        "OrdinalRankL": "OrdinalRankA",
+    }
+
+    win_df = win_df.copy()
+    lose_df = win_df.copy()
+
+    win_df = win_df.rename(columns=win_rename)
+    lose_df = lose_df.rename(columns=lose_rename)
+
+    return pd.concat([win_df, lose_df], 0, sort=False)
+
+
+def rescale(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    min_ = df_train[features].min()
+    max_ = df_train[features].max()
+
+    df_train[features] = (df_train[features] - min_) / (max_ - min_)
+    df_val[features] = (df_val[features] - min_) / (max_ - min_)
+
+    if df_test is not None:
+        df_test[features] = (df_test[features] - min_) / (max_ - min_)
+
+    return df_train, df_val, df_test
+
+
 # %%
-fig = plt.figure(figsize=(5, 5))
-sns.countplot(data=MRegularSeasonCompactResults, x="NumOT")
-plt.show()
-# %%
-fig = plt.figure(figsize=(15, 5))
-sns.countplot(data=MRegularSeasonCompactResults, x="Season")
-plt.show()
-# %%
-fig = plt.figure(figsize=(5, 50))
-sns.countplot(data=MRegularSeasonCompactResults, y="WTeamID")
-plt.show()
-# %%
-fig = plt.figure(figsize=(10, 5))
-sns.histplot(
-    MRegularSeasonCompactResults.groupby("WTeamID").apply(lambda x: len(x)).values,
-    bins=25,
+path = "../input/ncaam-march-mania-2021/MDataFiles_Stage2/"
+
+df_seeds = pd.read_csv(path + "MNCAATourneySeeds.csv")
+
+df_season_results = pd.read_csv(path + "MRegularSeasonCompactResults.csv")
+df_season_results.drop(["NumOT", "WLoc"], axis=1, inplace=True)
+df_season_results["ScoreGap"] = (
+    df_season_results["WScore"] - df_season_results["LScore"]
 )
-plt.title("Distribution of total number of wins by each teams")
-plt.show()
-
+df_season_results.head()
 # %%
-fig = plt.figure(figsize=(10, 5))
-sns.histplot(
-    MRegularSeasonCompactResults.groupby("LTeamID").apply(lambda x: len(x)).values,
-    bins=25,
+num_win = df_season_results.groupby(["Season", "WTeamID"]).count()
+num_win = num_win.reset_index()[["Season", "WTeamID", "DayNum"]].rename(
+    columns={"DayNum": "NumWins", "WTeamID": "TeamID"}
 )
-plt.title("Distribution of total number of Losses by each teams")
-plt.show()
+num_win.head()
 # %%
-fig = plt.figure(figsize=(10, 5))
-sns.histplot(data=MRegularSeasonCompactResults, x="WScore")
-plt.show()
+num_loss = df_season_results.groupby(["Season", "LTeamID"]).count()
+num_loss = num_loss.reset_index()[["Season", "LTeamID", "DayNum"]].rename(
+    columns={"DayNum": "NumLosses", "LTeamID": "TeamID"}
+)
+num_loss.head()
 # %%
-fig = plt.figure(figsize=(10, 5))
-sns.histplot(data=MRegularSeasonCompactResults, x="LScore")
-plt.show()
+gap_win = df_season_results.groupby(["Season", "WTeamID"]).mean().reset_index()
+gap_win = gap_win[["Season", "WTeamID", "ScoreGap"]].rename(
+    columns={"ScoreGap": "GapWins", "WTeamID": "TeamID"}
+)
+gap_win.head()
 # %%
-MRegularSeasonCompactResults["score_difference"] = (
-    MRegularSeasonCompactResults["WScore"] - MRegularSeasonCompactResults["LScore"]
+gap_loss = df_season_results.groupby(["Season", "LTeamID"]).mean().reset_index()
+gap_loss = gap_loss[["Season", "LTeamID", "ScoreGap"]].rename(
+    columns={"ScoreGap": "GapLosses", "LTeamID": "TeamID"}
 )
 
-fig = plt.figure(figsize=(10, 5))
-sns.histplot(data=MRegularSeasonCompactResults, x="score_difference")
-plt.show()
-# %%
-fig = plt.figure(figsize=(10, 5))
-sns.histplot(data=MRegularSeasonCompactResults, x="DayNum")
-plt.show()
-# %%
-MRegularSeasonDetailedResults = pd.read_csv(path + "/MRegularSeasonDetailedResults.csv")
-MRegularSeasonDetailedResults.head()
-# %%
-mrsc_results = pd.read_csv(path + "MRegularSeasonCompactResults.csv")
-A_w = (
-    mrsc_results[mrsc_results.WLoc == "A"]
-    .groupby(["Season", "WTeamID"])["WTeamID"]
+df_features_season_w = (
+    df_season_results.groupby(["Season", "WTeamID"])
     .count()
-    .to_frame()
-    .rename(columns={"WTeamID": "win_A"})
+    .reset_index()[["Season", "WTeamID"]]
+    .rename(columns={"WTeamID": "TeamID"})
 )
-A_w
+df_features_season_l = (
+    df_season_results.groupby(["Season", "LTeamID"])
+    .count()
+    .reset_index()[["Season", "LTeamID"]]
+    .rename(columns={"LTeamID": "TeamID"})
+)
+
+df_features_season = (
+    pd.concat([df_features_season_w, df_features_season_l], 0)
+    .drop_duplicates()
+    .sort_values(["Season", "TeamID"])
+    .reset_index(drop=True)
+)
+
+df_features_season = df_features_season.merge(
+    num_win, on=["Season", "TeamID"], how="left"
+)
+df_features_season = df_features_season.merge(
+    num_loss, on=["Season", "TeamID"], how="left"
+)
+df_features_season = df_features_season.merge(
+    gap_win, on=["Season", "TeamID"], how="left"
+)
+df_features_season = df_features_season.merge(
+    gap_loss, on=["Season", "TeamID"], how="left"
+)
+df_features_season.fillna(0, inplace=True)
+
+df_features_season["WinRatio"] = df_features_season["NumWins"] / (
+    df_features_season["NumWins"] + df_features_season["NumLosses"]
+)
+
+df_features_season["GapAvg"] = (
+    df_features_season["NumWins"] * df_features_season["GapWins"]
+    - df_features_season["NumLosses"] * df_features_season["GapLosses"]
+) / (df_features_season["NumWins"] + df_features_season["NumLosses"])
+
+df_features_season.drop(
+    ["NumWins", "NumLosses", "GapWins", "GapLosses"], axis=1, inplace=True
+)
+df_tourney_results = pd.read_csv(path + "MNCAATourneyCompactResults.csv")
+df_tourney_results.drop(["NumOT", "WLoc"], axis=1, inplace=True)
+df_tourney_results["Round"] = df_tourney_results["DayNum"].apply(get_round)
+
+df_massey = pd.read_csv(path + "MMasseyOrdinals.csv")
+df_massey = (
+    df_massey[df_massey["RankingDayNum"] == 133]
+    .drop("RankingDayNum", axis=1)
+    .reset_index(drop=True)
+)  # use first day of the tournament
+
+systems = []
+for year in range(2003, 2019):
+    r = df_massey[df_massey["Season"] == year]
+    systems.append(r["SystemName"].unique())
+
+all_systems = list(set(list(np.concatenate(systems))))
+
+common_systems = []
+# ['RTH', 'RPI', 'COL', 'AP', 'POM', 'USA', 'DOL', 'MOR', 'SAG', 'WOL', 'WLK']
+for system in all_systems:
+    common = True
+    for system_years in systems:
+        if system not in system_years:
+            common = False
+    if common:
+        common_systems.append(system)
+
+df_massey = df_massey[df_massey["SystemName"].isin(common_systems)].reset_index(
+    drop=True
+)
+
+df = df_tourney_results.copy()
+df = df[df["Season"] >= 2003].reset_index(drop=True)
+df.head()
+print(df.shape)
+# %%
+df_seeds.head()
+print(df_seeds.shape)
+# %%
+df = (
+    pd.merge(
+        df,
+        df_seeds,
+        how="left",
+        left_on=["Season", "WTeamID"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(columns={"Seed": "SeedW"})
+)
+
+df = (
+    pd.merge(
+        df,
+        df_seeds,
+        how="left",
+        left_on=["Season", "LTeamID"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(columns={"Seed": "SeedL"})
+)
+print(df.shape)
+df.head()
+
+df["SeedW"] = df["SeedW"].astype(str)
+df["SeedL"] = df["SeedL"].astype(str)
+
+df["SeedW"] = df["SeedW"].apply(treat_seed)
+df["SeedL"] = df["SeedL"].apply(treat_seed)
+# %%
+df = (
+    pd.merge(
+        df,
+        df_features_season,
+        how="left",
+        left_on=["Season", "WTeamID"],
+        right_on=["Season", "TeamID"],
+    )
+    .rename(
+        columns={
+            "NumWins": "NumWinsW",
+            "NumLosses": "NumLossesW",
+            "GapWins": "GapWinsW",
+            "GapLosses": "GapLossesW",
+            "WinRatio": "WinRatioW",
+            "GapAvg": "GapAvgW",
+        }
+    )
+    .drop(columns="TeamID", axis=1)
+)
+df = (
+    pd.merge(
+        df,
+        df_features_season,
+        how="left",
+        left_on=["Season", "LTeamID"],
+        right_on=["Season", "TeamID"],
+    )
+    .rename(
+        columns={
+            "NumWins": "NumWinsL",
+            "NumLosses": "NumLossesL",
+            "GapWins": "GapWinsL",
+            "GapLosses": "GapLossesL",
+            "WinRatio": "WinRatioL",
+            "GapAvg": "GapAvgL",
+        }
+    )
+    .drop(columns="TeamID", axis=1)
+)
+avg_ranking = df_massey.groupby(["Season", "TeamID"]).mean().reset_index()
+
+df = (
+    pd.merge(
+        df,
+        avg_ranking,
+        how="left",
+        left_on=["Season", "WTeamID"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(columns={"OrdinalRank": "OrdinalRankW"})
+)
+
+df = (
+    pd.merge(
+        df,
+        avg_ranking,
+        how="left",
+        left_on=["Season", "LTeamID"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(columns={"OrdinalRank": "OrdinalRankL"})
+)
+
+df = add_loosing_matches(df)
+df["SeedDiff"] = df["SeedA"] - df["SeedB"]
+df["OrdinalRankDiff"] = df["OrdinalRankA"] - df["OrdinalRankB"]
+df["WinRatioDiff"] = df["WinRatioA"] - df["WinRatioB"]
+df["GapAvgDiff"] = df["GapAvgA"] - df["GapAvgB"]
+df["ScoreDiff"] = df["ScoreA"] - df["ScoreB"]
+df["WinA"] = (df["ScoreDiff"] > 0).astype(int)
+
+df_test = pd.read_csv(path + "MSampleSubmissionStage2.csv")
+df_test["Season"] = df_test["ID"].apply(lambda x: int(x.split("_")[0]))
+df_test["TeamIdA"] = df_test["ID"].apply(lambda x: int(x.split("_")[1]))
+df_test["TeamIdB"] = df_test["ID"].apply(lambda x: int(x.split("_")[2]))
+
+df_test = (
+    pd.merge(
+        df_test,
+        df_seeds,
+        how="left",
+        left_on=["Season", "TeamIdA"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(columns={"Seed": "SeedA"})
+)
+df_test = (
+    pd.merge(
+        df_test,
+        df_seeds,
+        how="left",
+        left_on=["Season", "TeamIdB"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(columns={"Seed": "SeedB"})
+)
+df_test["SeedA"] = df_test["SeedA"].apply(treat_seed)
+df_test["SeedB"] = df_test["SeedB"].apply(treat_seed)
+
+df_test = (
+    pd.merge(
+        df_test,
+        df_features_season,
+        how="left",
+        left_on=["Season", "TeamIdA"],
+        right_on=["Season", "TeamID"],
+    )
+    .rename(
+        columns={
+            "NumWins": "NumWinsA",
+            "NumLosses": "NumLossesA",
+            "GapWins": "GapWinsA",
+            "GapLosses": "GapLossesA",
+            "WinRatio": "WinRatioA",
+            "GapAvg": "GapAvgA",
+        }
+    )
+    .drop(columns="TeamID", axis=1)
+)
+df_test = (
+    pd.merge(
+        df_test,
+        df_features_season,
+        how="left",
+        left_on=["Season", "TeamIdB"],
+        right_on=["Season", "TeamID"],
+    )
+    .rename(
+        columns={
+            "NumWins": "NumWinsB",
+            "NumLosses": "NumLossesB",
+            "GapWins": "GapWinsB",
+            "GapLosses": "GapLossesB",
+            "WinRatio": "WinRatioB",
+            "GapAvg": "GapAvgB",
+        }
+    )
+    .drop(columns="TeamID", axis=1)
+)
+df_test = (
+    pd.merge(
+        df_test,
+        avg_ranking,
+        how="left",
+        left_on=["Season", "TeamIdA"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(columns={"OrdinalRank": "OrdinalRankA"})
+)
+df_test = (
+    pd.merge(
+        df_test,
+        avg_ranking,
+        how="left",
+        left_on=["Season", "TeamIdB"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(columns={"OrdinalRank": "OrdinalRankB"})
+)
+df_test["SeedDiff"] = df_test["SeedA"] - df_test["SeedB"]
+df_test["OrdinalRankDiff"] = df_test["OrdinalRankA"] - df_test["OrdinalRankB"]
+df_test["WinRatioDiff"] = df_test["WinRatioA"] - df_test["WinRatioB"]
+df_test["GapAvgDiff"] = df_test["GapAvgA"] - df_test["GapAvgB"]
+
+
+# %%
+df
+# %%
+df_test
+# %%
+
+kenpom = pd.read_csv("../input/ncaam-march-mania-2021/kenpom.csv")
+kenpom.drop(['team', 'conf'], axis=1, inplace=True)
+# %%
+
+kenpom = kenpom.dropna()
+kenpom = kenpom.drop_duplicates()
+# %%
+df = (
+    pd.merge(
+        df,
+        kenpom,
+        how="left",
+        left_on=["Season", "TeamIdA"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(
+        columns={
+            "adjo": "adjoA",
+            "adjd": "adjdA",
+            "luck": "luckA",
+        }
+    )
+)
+df
+# %%
+df.isna().sum()
+# %%
+df = (
+    pd.merge(
+        df,
+        kenpom,
+        how="left",
+        left_on=["Season", "TeamIdB"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(
+        columns={
+            "adjo": "adjoB",
+            "adjd": "adjdB",
+            "luck": "luckB",
+        }
+    )
+)
+df
+
+# %%
+df.isna().sum()
+# %%
+df_test = (
+    pd.merge(
+        df_test,
+        kenpom,
+        how="left",
+        left_on=["Season", "TeamIdA"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(
+        columns={
+            "adjo": "adjoA",
+            "adjd": "adjdA",
+            "luck": "luckA",
+        }
+    )
+)
+df_test
+# %%
+df_test = (
+    pd.merge(
+        df_test,
+        kenpom,
+        how="inner",
+        left_on=["Season", "TeamIdB"],
+        right_on=["Season", "TeamID"],
+    )
+    .drop("TeamID", axis=1)
+    .rename(
+        columns={
+            "adjo": "adjoB",
+            "adjd": "adjdB",
+            "luck": "luckB",
+        }
+    )
+)
+df_test
+# %%
+df_test.sort_values(by="ID")
+# %%
+df_test.tail()
+
+# %%
+df_test.isna().sum()
+# %%
+df.fillna(0, inplace=True)
+df.isna().sum()
 # %%

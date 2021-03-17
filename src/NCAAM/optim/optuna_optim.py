@@ -23,6 +23,15 @@ features = [
     "OrdinalRankDiff",
     "WinRatioDiff",
     "GapAvgDiff",
+    "adjoA",
+    "adjoB",
+    "adjdA",
+    "adjdB",
+    "luckA",
+    "luckB",
+    "adjoDiff",
+    "adjdDiff",
+    "luckDiff",
 ]
 target = "WinA"
 
@@ -48,11 +57,11 @@ def objective(
         "subsample_freq": trial.suggest_int("subsample_freq", 1, 7),
         "min_child_samples": trial.suggest_int("min_child_samples", 10, 100),
     }
-    seasons = df["Season"].unique()
+    seasons = np.array([2015, 2016, 2017, 2018, 2019])
     cvs = np.array([])
     pred_tests = []
 
-    for season in seasons[12:]:
+    for season in seasons:
         df_train = df[df["Season"] < season].reset_index(drop=True).copy()
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
         df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
@@ -83,7 +92,7 @@ def objective(
         loss = log_loss(df_val[target].values, pred)
         cvs = np.append(cvs, loss)
 
-    weights = np.array([0.1, 0.05, 0.2, 0.05, 0.7])
+    weights = np.array([0.1, 0.1, 0.2, 0.4, 0.2])
     loss = np.sum(weights * cvs)
 
     return loss
