@@ -92,7 +92,7 @@ def objective(
         loss = log_loss(df_val[target].values, pred)
         cvs = np.append(cvs, loss)
 
-    weights = np.array([0.1, 0.1, 0.2, 0.4, 0.2])
+    weights = np.array([0.1, 0.1, 0.3, 0.3, 0.2])
     loss = np.sum(weights * cvs)
 
     return loss
