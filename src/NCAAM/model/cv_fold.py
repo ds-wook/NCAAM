@@ -25,15 +25,21 @@ features = [
     "OrdinalRankDiff",
     "WinRatioDiff",
     "GapAvgDiff",
-    "adjoA",
-    "adjoB",
-    "adjdA",
-    "adjdB",
+    "adj_oA",
+    "adj_oB",
+    "adj_dA",
+    "adj_dB",
+    "adj_emA",
+    "adj_emB",
+    "adj_emDiff",
     "luckA",
     "luckB",
-    "adjoDiff",
-    "adjdDiff",
+    "rankA",
+    "rankB",
+    "adj_oDiff",
+    "adj_dDiff",
     "luckDiff",
+    "rankDiff",
 ]
 target = "WinA"
 
@@ -49,13 +55,7 @@ def lgb_kfold_model(
     cvs = np.array([])
     pred_tests = np.zeros(df_test_.shape[0])
 
-    lgb_params = {
-        "num_leaves": 24,
-        "colsample_bytree": 0.897413960991818,
-        "subsample": 0.5028604067583243,
-        "subsample_freq": 1,
-        "min_child_samples": 76,
-    }
+    lgb_params = pd.read_pickle("../../params/" + params)
     lgb_params["objective"] = "binary"
     lgb_params["boosting_type"] = "gbdt"
     lgb_params["n_estimators"] = 20000

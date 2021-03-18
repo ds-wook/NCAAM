@@ -6,7 +6,7 @@ from data.fea_eng import get_round, treat_seed, add_loosing_matches
 
 
 def load_dataset() -> Tuple[pd.DataFrame, pd.DataFrame]:
-    path = "../../input/ncaam-march-mania-2021/MDataFiles_Stage2/"
+    path = "../../input/ncaam-march-mania-2021/MDataFiles_Stage1/"
 
     df_seeds = pd.read_csv(path + "MNCAATourneySeeds.csv")
 
@@ -212,56 +212,17 @@ def load_dataset() -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     df = add_loosing_matches(df)
 
-    kenpom = pd.read_csv("../../input/ncaam-march-mania-2021/kenpom.csv")
-    kenpom.drop(["team", "conf"], axis=1, inplace=True)
-    kenpom = kenpom.dropna()
-    kenpom = kenpom.drop_duplicates()
-    df = (
-        pd.merge(
-            df,
-            kenpom,
-            how="left",
-            left_on=["Season", "TeamIdA"],
-            right_on=["Season", "TeamID"],
-        )
-        .drop("TeamID", axis=1)
-        .rename(
-            columns={
-                "adjo": "adjoA",
-                "adjd": "adjdA",
-                "luck": "luckA",
-            }
-        )
-    )
-    df = (
-        pd.merge(
-            df,
-            kenpom,
-            how="left",
-            left_on=["Season", "TeamIdB"],
-            right_on=["Season", "TeamID"],
-        )
-        .drop("TeamID", axis=1)
-        .rename(
-            columns={
-                "adjo": "adjoB",
-                "adjd": "adjdB",
-                "luck": "luckB",
-            }
-        )
-    )
-
     df["SeedDiff"] = df["SeedA"] - df["SeedB"]
     df["OrdinalRankDiff"] = df["OrdinalRankA"] - df["OrdinalRankB"]
     df["WinRatioDiff"] = df["WinRatioA"] - df["WinRatioB"]
     df["GapAvgDiff"] = df["GapAvgA"] - df["GapAvgB"]
     df["ScoreDiff"] = df["ScoreA"] - df["ScoreB"]
     df["WinA"] = (df["ScoreDiff"] > 0).astype(int)
-    df["adjoDiff"] = df["adjoA"] - df["adjoB"]
-    df["adjdDiff"] = df["adjdA"] - df["adjdB"]
-    df["luckDiff"] = df["luckA"] - df["luckB"]
+    df["ratingA"] = 100 - 4 * np.log(df["OrdinalRankA"] + 1) - df["OrdinalRankA"] / 22
+    df["ratingB"] = 100 - 4 * np.log(df["OrdinalRankB"] + 1) - df["OrdinalRankB"] // 22
+    df["prob"] = 1 / (1 + 10 ** ((df["ratingB"] - df["ratingA"]) / 15))
 
-    df_test = pd.read_csv(path + "MSampleSubmissionStage2.csv")
+    df_test = pd.read_csv(path + "MSampleSubmissionStage1.csv")
     df_test["Season"] = df_test["ID"].apply(lambda x: int(x.split("_")[0]))
     df_test["TeamIdA"] = df_test["ID"].apply(lambda x: int(x.split("_")[1]))
     df_test["TeamIdB"] = df_test["ID"].apply(lambda x: int(x.split("_")[2]))
@@ -357,49 +318,15 @@ def load_dataset() -> Tuple[pd.DataFrame, pd.DataFrame]:
         .rename(columns={"OrdinalRank": "OrdinalRankB"})
     )
 
-    df_test = (
-        pd.merge(
-            df_test,
-            kenpom,
-            how="left",
-            left_on=["Season", "TeamIdA"],
-            right_on=["Season", "TeamID"],
-        )
-        .drop("TeamID", axis=1)
-        .rename(
-            columns={
-                "adjo": "adjoA",
-                "adjd": "adjdA",
-                "luck": "luckA",
-            }
-        )
-    )
-
-    df_test = (
-        pd.merge(
-            df_test,
-            kenpom,
-            how="inner",
-            left_on=["Season", "TeamIdB"],
-            right_on=["Season", "TeamID"],
-        )
-        .drop("TeamID", axis=1)
-        .rename(
-            columns={
-                "adjo": "adjoB",
-                "adjd": "adjdB",
-                "luck": "luckB",
-            }
-        )
-    )
-
     df_test["SeedDiff"] = df_test["SeedA"] - df_test["SeedB"]
     df_test["OrdinalRankDiff"] = df_test["OrdinalRankA"] - df_test["OrdinalRankB"]
     df_test["WinRatioDiff"] = df_test["WinRatioA"] - df_test["WinRatioB"]
     df_test["GapAvgDiff"] = df_test["GapAvgA"] - df_test["GapAvgB"]
-    df_test["adjoDiff"] = df_test["adjoA"] - df_test["adjoB"]
-    df_test["adjdDiff"] = df_test["adjdA"] - df_test["adjdB"]
-    df_test["luckDiff"] = df_test["luckA"] - df_test["luckB"]
-    df.fillna(0, inplace=True)
-    df_test = df_test.sort_values(by="ID")
+    df_test["ratingA"] = (
+        100 - 4 * np.log(df_test["OrdinalRankA"] + 1) - df_test["OrdinalRankA"] / 22
+    )
+    df_test["ratingB"] = (
+        100 - 4 * np.log(df_test["OrdinalRankB"] + 1) - df_test["OrdinalRankB"] // 22
+    )
+    df_test["prob"] = 1 / (1 + 10 ** ((df_test["ratingB"] - df_test["ratingA"]) / 15))
     return df, df_test

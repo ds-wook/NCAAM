@@ -1,6 +1,8 @@
 # %%
-import numpy as np
 import pandas as pd
+import numpy as np
+from trueskill import TrueSkill, Rating, rate_1vs1
+import trueskill
 
 from typing import List, Tuple
 import re
@@ -102,26 +104,22 @@ df_season_results.drop(["NumOT", "WLoc"], axis=1, inplace=True)
 df_season_results["ScoreGap"] = (
     df_season_results["WScore"] - df_season_results["LScore"]
 )
-df_season_results.head()
-# %%
+
 num_win = df_season_results.groupby(["Season", "WTeamID"]).count()
 num_win = num_win.reset_index()[["Season", "WTeamID", "DayNum"]].rename(
     columns={"DayNum": "NumWins", "WTeamID": "TeamID"}
 )
-num_win.head()
-# %%
+
 num_loss = df_season_results.groupby(["Season", "LTeamID"]).count()
 num_loss = num_loss.reset_index()[["Season", "LTeamID", "DayNum"]].rename(
     columns={"DayNum": "NumLosses", "LTeamID": "TeamID"}
 )
-num_loss.head()
-# %%
+
 gap_win = df_season_results.groupby(["Season", "WTeamID"]).mean().reset_index()
 gap_win = gap_win[["Season", "WTeamID", "ScoreGap"]].rename(
     columns={"ScoreGap": "GapWins", "WTeamID": "TeamID"}
 )
-gap_win.head()
-# %%
+
 gap_loss = df_season_results.groupby(["Season", "LTeamID"]).mean().reset_index()
 gap_loss = gap_loss[["Season", "LTeamID", "ScoreGap"]].rename(
     columns={"ScoreGap": "GapLosses", "LTeamID": "TeamID"}
@@ -207,12 +205,7 @@ df_massey = df_massey[df_massey["SystemName"].isin(common_systems)].reset_index(
 
 df = df_tourney_results.copy()
 df = df[df["Season"] >= 2003].reset_index(drop=True)
-df.head()
-print(df.shape)
-# %%
-df_seeds.head()
-print(df_seeds.shape)
-# %%
+
 df = (
     pd.merge(
         df,
@@ -244,7 +237,7 @@ df["SeedL"] = df["SeedL"].astype(str)
 
 df["SeedW"] = df["SeedW"].apply(treat_seed)
 df["SeedL"] = df["SeedL"].apply(treat_seed)
-# %%
+
 df = (
     pd.merge(
         df,
@@ -415,113 +408,97 @@ df_test["SeedDiff"] = df_test["SeedA"] - df_test["SeedB"]
 df_test["OrdinalRankDiff"] = df_test["OrdinalRankA"] - df_test["OrdinalRankB"]
 df_test["WinRatioDiff"] = df_test["WinRatioA"] - df_test["WinRatioB"]
 df_test["GapAvgDiff"] = df_test["GapAvgA"] - df_test["GapAvgB"]
+# %%
+ts = TrueSkill(draw_probability=0.01)  # 0.01 is arbitary small number
+beta = 25 / 6  # default value
+
+
+def win_probability(p1, p2):
+    delta_mu = p1.mu - p2.mu
+    sum_sigma = p1.sigma * p1.sigma + p2.sigma * p2.sigma
+    denom = np.sqrt(2 * (beta * beta) + sum_sigma)
+    return ts.cdf(delta_mu / denom)
 
 
 # %%
-df
-# %%
-df_test
-# %%
 
-kenpom = pd.read_csv("../input/ncaam-march-mania-2021/kenpom.csv")
-kenpom.drop(['team', 'conf'], axis=1, inplace=True)
-# %%
-
-kenpom = kenpom.dropna()
-kenpom = kenpom.drop_duplicates()
-# %%
-df = (
-    pd.merge(
-        df,
-        kenpom,
-        how="left",
-        left_on=["Season", "TeamIdA"],
-        right_on=["Season", "TeamID"],
-    )
-    .drop("TeamID", axis=1)
-    .rename(
-        columns={
-            "adjo": "adjoA",
-            "adjd": "adjdA",
-            "luck": "luckA",
-        }
-    )
+path = "../input/ncaam-march-mania-2021/MDataFiles_Stage1/"
+submit = pd.read_csv(path + "MSampleSubmissionStage1.csv")
+submit[["Season", "Team1", "Team2"]] = submit.apply(
+    lambda r: pd.Series([int(t) for t in r.ID.split("_")]), axis=1
 )
-df
+submit.head()
 # %%
-df.isna().sum()
+df_tour = df
+df_tour.head()
 # %%
-df = (
-    pd.merge(
-        df,
-        kenpom,
-        how="left",
-        left_on=["Season", "TeamIdB"],
-        right_on=["Season", "TeamID"],
-    )
-    .drop("TeamID", axis=1)
-    .rename(
-        columns={
-            "adjo": "adjoB",
-            "adjd": "adjdB",
-            "luck": "luckB",
-        }
-    )
+team_ids = np.unique(
+    np.concatenate([df_tour["TeamIdA"].values, df_tour["TeamIdB"].values])
 )
-df
+ratings = {tid: ts.Rating() for tid in team_ids}
 
 # %%
-df.isna().sum()
-# %%
-df_test = (
-    pd.merge(
-        df_test,
-        kenpom,
-        how="left",
-        left_on=["Season", "TeamIdA"],
-        right_on=["Season", "TeamID"],
+
+
+def feed_season_results(season: int):
+    print("season = {}".format(season))
+    df1 = df_tour[df_tour.Season == season]
+    for r in df1.itertuples():
+        ratings[r.TeamIdA], ratings[r.TeamIdB] = rate_1vs1(
+            ratings[r.TeamIdA], ratings[r.TeamIdB]
+        )
+
+
+def update_pred(season: int):
+    beta = np.std([r.mu for r in ratings.values()])
+    print("beta = {}".format(beta))
+    submit.loc[submit.Season == season, "Pred"] = submit[submit.Season == season].apply(
+        lambda r: win_probability(ratings[r.Team1], ratings[r.Team2]), axis=1
     )
-    .drop("TeamID", axis=1)
-    .rename(
-        columns={
-            "adjo": "adjoA",
-            "adjd": "adjdA",
-            "luck": "luckA",
-        }
-    )
-)
-df_test
-# %%
-df_test = (
-    pd.merge(
-        df_test,
-        kenpom,
-        how="inner",
-        left_on=["Season", "TeamIdB"],
-        right_on=["Season", "TeamID"],
-    )
-    .drop("TeamID", axis=1)
-    .rename(
-        columns={
-            "adjo": "adjoB",
-            "adjd": "adjdB",
-            "luck": "luckB",
-        }
-    )
-)
-df_test
-# %%
-df_test.sort_values(by="ID")
-# %%
-df_test.tail()
+
 
 # %%
-df_test.isna().sum()
+for season in sorted(df_tour["Season"].unique())[:-5]:
+    feed_season_results(season)
+
 # %%
-df.fillna(0, inplace=True)
-df.isna().sum()
+update_pred(2015)
+feed_season_results(2015)
+update_pred(2016)
+feed_season_results(2016)
+update_pred(2017)
+feed_season_results(2017)
+update_pred(2018)
+feed_season_results(2018)
+update_pred(2019)
 # %%
-df[["TeamIdA", "TeamIdB", "WinA"]].loc[df["WinA"] == 0]
+submit.drop(["Season", "Team1", "Team2"], axis=1, inplace=True)
+y_preds_ts = submit["Pred"]
+submit
 # %%
-df[["TeamIdA", "TeamIdB", "WinA"]].loc[df["WinA"] == 1]
+submit.to_csv("../submission/true_skills_test.csv", index=False)
+submit.head()
+# %%
+df_tour
+# %%
+def feed_season_results(season: int):
+    print("season = {}".format(season))
+    df1 = df_tour[df_tour.Season == season]
+    for r in df1.itertuples():
+        ratings[r.TeamIdA], ratings[r.TeamIdB] = rate_1vs1(
+            ratings[r.TeamIdA], ratings[r.TeamIdB]
+        )
+
+
+def update_pred(season: int):
+    beta = np.std([r.mu for r in ratings.values()])
+    print("beta = {}".format(beta))
+    df_tour.loc[df_tour.Season == season, "Pred"] = df_tour[
+        df_tour.Season == season
+    ].apply(lambda r: win_probability(ratings[r.TeamIdA], ratings[r.TeamIdB]), axis=1)
+
+# %%
+for season in range(2003, 2020):
+    update_pred(season)
+df_tour
 # %%

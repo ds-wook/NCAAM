@@ -23,15 +23,9 @@ features = [
     "OrdinalRankDiff",
     "WinRatioDiff",
     "GapAvgDiff",
-    "adjoA",
-    "adjoB",
-    "adjdA",
-    "adjdB",
-    "luckA",
-    "luckB",
-    "adjoDiff",
-    "adjdDiff",
-    "luckDiff",
+    "ratingA",
+    "ratingB",
+    "prob",
 ]
 target = "WinA"
 
@@ -92,7 +86,7 @@ def objective(
         loss = log_loss(df_val[target].values, pred)
         cvs = np.append(cvs, loss)
 
-    weights = np.array([0.1, 0.1, 0.3, 0.3, 0.2])
+    weights = np.array([0.1, 0.1, 0.2, 0.2, 0.4])
     loss = np.sum(weights * cvs)
 
     return loss
