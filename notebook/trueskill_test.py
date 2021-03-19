@@ -1,8 +1,9 @@
 # %%
-import re
-import numpy as np
 import pandas as pd
+import numpy as np
+from trueskill import TrueSkill, Rating, rate_1vs1
 from typing import List, Tuple
+import re
 
 # %%
 
@@ -73,8 +74,26 @@ def add_loosing_matches(win_df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([win_df, lose_df], 0, sort=False)
 
 
+def rescale(
+    features: List[str],
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    df_test: pd.DataFrame = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    min_ = df_train[features].min()
+    max_ = df_train[features].max()
+
+    df_train[features] = (df_train[features] - min_) / (max_ - min_)
+    df_val[features] = (df_val[features] - min_) / (max_ - min_)
+
+    if df_test is not None:
+        df_test[features] = (df_test[features] - min_) / (max_ - min_)
+
+    return df_train, df_val, df_test
+
+
 # %%
-path = "../input/ncaam-march-mania-2021/MDataFiles_Stage2/"
+path = "../input/ncaam-march-mania-2021/MDataFiles_Stage1/"
 
 df_seeds = pd.read_csv(path + "MNCAATourneySeeds.csv")
 
@@ -103,7 +122,7 @@ gap_loss = df_season_results.groupby(["Season", "LTeamID"]).mean().reset_index()
 gap_loss = gap_loss[["Season", "LTeamID", "ScoreGap"]].rename(
     columns={"ScoreGap": "GapLosses", "LTeamID": "TeamID"}
 )
-# %%
+
 df_features_season_w = (
     df_season_results.groupby(["Season", "WTeamID"])
     .count()
@@ -150,12 +169,10 @@ df_features_season["GapAvg"] = (
 df_features_season.drop(
     ["NumWins", "NumLosses", "GapWins", "GapLosses"], axis=1, inplace=True
 )
-# %%
 df_tourney_results = pd.read_csv(path + "MNCAATourneyCompactResults.csv")
-df_test = pd.read_csv(path + "MSampleSubmissionStage2.csv")
 df_tourney_results.drop(["NumOT", "WLoc"], axis=1, inplace=True)
 df_tourney_results["Round"] = df_tourney_results["DayNum"].apply(get_round)
-# %%
+
 df_massey = pd.read_csv(path + "MMasseyOrdinals.csv")
 df_massey = (
     df_massey[df_massey["RankingDayNum"] == 133]
@@ -183,12 +200,7 @@ for system in all_systems:
 df_massey = df_massey[df_massey["SystemName"].isin(common_systems)].reset_index(
     drop=True
 )
-# %%
-df_massey.head()
-# %%
-df_massey = df_massey.groupby(["Season", "SystemName", "TeamID"]).last().reset_index()
-df_massey
-# %%
+
 df = df_tourney_results.copy()
 df = df[df["Season"] >= 2003].reset_index(drop=True)
 
@@ -215,6 +227,11 @@ df = (
     .drop("TeamID", axis=1)
     .rename(columns={"Seed": "SeedL"})
 )
+print(df.shape)
+df.head()
+
+df["SeedW"] = df["SeedW"].astype(str)
+df["SeedL"] = df["SeedL"].astype(str)
 
 df["SeedW"] = df["SeedW"].apply(treat_seed)
 df["SeedL"] = df["SeedL"].apply(treat_seed)
@@ -292,13 +309,8 @@ df["WinRatioDiff"] = df["WinRatioA"] - df["WinRatioB"]
 df["GapAvgDiff"] = df["GapAvgA"] - df["GapAvgB"]
 df["ScoreDiff"] = df["ScoreA"] - df["ScoreB"]
 df["WinA"] = (df["ScoreDiff"] > 0).astype(int)
-df.head()
-# %%
-df["Arating"] = 100 - 4 * np.log1p(df["OrdinalRankA"]) - df["OrdinalRankA"] / 22
-df["Brating"] = 100 - 4 * np.log1p(df["OrdinalRankB"]) - df["OrdinalRankB"] / 22
-df["Prob"] = 1 / (1 + 10 ** ((df["Brating"] - df["Arating"]) / 15))
-df.head()
-# %%
+
+df_test = pd.read_csv(path + "MSampleSubmissionStage1.csv")
 df_test["Season"] = df_test["ID"].apply(lambda x: int(x.split("_")[0]))
 df_test["TeamIdA"] = df_test["ID"].apply(lambda x: int(x.split("_")[1]))
 df_test["TeamIdB"] = df_test["ID"].apply(lambda x: int(x.split("_")[2]))
@@ -394,17 +406,62 @@ df_test["SeedDiff"] = df_test["SeedA"] - df_test["SeedB"]
 df_test["OrdinalRankDiff"] = df_test["OrdinalRankA"] - df_test["OrdinalRankB"]
 df_test["WinRatioDiff"] = df_test["WinRatioA"] - df_test["WinRatioB"]
 df_test["GapAvgDiff"] = df_test["GapAvgA"] - df_test["GapAvgB"]
-df_test["Arating"] = (
-    100 - 4 * np.log1p(df_test["OrdinalRankA"]) - df_test["OrdinalRankA"] / 22
-)
-df_test["Brating"] = (
-    100 - 4 * np.log1p(df_test["OrdinalRankB"]) - df_test["OrdinalRankB"] / 22
-)
-df_test["Prob"] = 1 / (1 + 10 ** ((df_test["Brating"] - df_test["Arating"]) / 15))
 # %%
-df_test.shape
+print(df.shape)
+df.head()
 # %%
-df.shape
+print(df_test.shape)
+df_test.head()
 # %%
-df_test
+ts = TrueSkill(draw_probability=0.01)  # 0.01 is arbitary small number
+beta = 25 / 6  # default value
+
+
+def win_probability(p1: Rating, p2: Rating) -> float:
+    delta_mu = p1.mu - p2.mu
+    sum_sigma = p1.sigma * p1.sigma + p2.sigma * p2.sigma
+    denom = np.sqrt(2 * (beta * beta) + sum_sigma)
+    return ts.cdf(delta_mu / denom)
+
+
+# %%
+
+def feed_season_results(season: int, df: pd.DataFrame):
+    team_ids = np.unique(np.concatenate([df["TeamIdA"].values, df["TeamIdB"].values]))
+    ratings = {tid: ts.Rating() for tid in team_ids}
+    print("season = {}".format(season))
+    df1 = df[df.Season == season]
+    for r in df1.itertuples():
+        ratings[r.TeamIdA], ratings[r.TeamIdB] = rate_1vs1(
+            ratings[r.TeamIdA], ratings[r.TeamIdB]
+        )
+    return ratings
+
+
+def update_pred(season: int, ratings, df):
+    beta = np.std([r.mu for r in ratings.values()])
+    print("beta = {}".format(beta))
+    df.loc[df.Season == season, "win_prob"] = df[df.Season == season].apply(
+        lambda r: win_probability(ratings[r.TeamIdA], ratings[r.TeamIdB]), axis=1
+    )
+    return df
+
+
+# %%
+for season in range(2003, 2020):
+    ratings = feed_season_results(season, df)
+    df = update_pred(season, ratings, df)
+
+# %%
+df.head()
+# %%
+for season in range(2003, 2020):
+    ratings = feed_season_results(season, df_test)
+    df_test = update_pred(season, ratings, df_test)
+# ratings = feed_season_results(2021, df_test)
+# df_test = update_pred(2021, ratings, df_test)
+df_test.head()
+# %%
+df.to_csv("../input/train_trueskill1.csv", index=False)
+df_test.to_csv("../input/test_trueskill1.csv", index=False)
 # %%

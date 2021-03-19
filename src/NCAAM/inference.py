@@ -6,15 +6,16 @@ import pandas as pd
 if __name__ == "__main__":
     parse = argparse.ArgumentParser("Training!")
     parse.add_argument(
-        "--path", type=str, help="Input data save path", default="../../res/"
+        "--path", type=str, help="Input data save path", default="../../submission/"
     )
     parse.add_argument("--file", type=str, help="Input file name", default="model.csv")
     args = parse.parse_args()
+    path = "../../input/ncaam-march-mania-2021/MDataFiles_Stage2/"
+    winner_solution = pd.read_csv("../../submission/MPred_1.csv")
+    my_solution = pd.read_csv("../../submission/lgbm_weights_prob2.csv")
+    sub = pd.read_csv(path + "MSampleSubmissionStage2.csv")
 
-    winner_solution = pd.read_csv("../../res/MPred_1.csv")
-    my_solution = pd.read_csv("../../res/3fold_lgbm_final.csv")
-    sub = pd.read_csv("../../input/ncaam-march-mania-2021/MSampleSubmissionStage1.csv")
     sub["Pred"] = np.average(
-        [winner_solution["Pred"], my_solution["Pred"]], axis=0, weights=[0.1, 0.9]
+        [winner_solution["Pred"], my_solution["Pred"]], axis=0, weights=[0.5, 0.5]
     )
-    sub.to_csv(args.file + args.file, index=False)
+    sub.to_csv(args.path + args.file, index=False)

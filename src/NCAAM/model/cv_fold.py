@@ -23,33 +23,36 @@ features = [
     "OrdinalRankDiff",
     "WinRatioDiff",
     "GapAvgDiff",
+    "ratingA",
+    "ratingB",
+    "Prob",
+    # "win_prob",
 ]
 target = "WinA"
 
 
 def lgb_kfold_model(
-    fold: int, df: pd.DataFrame, df_test_: pd.DataFrame = None, verbose: int = 1
+    df: pd.DataFrame, df_test_: pd.DataFrame = None, verbose: int = 1
 ) -> np.ndarray:
-    seasons = df["Season"].unique()
-    weights = np.array([0.05, 0.05, 0.25, 0.05, 0.6])
+    seasons = np.array([2015, 2016, 2017, 2018, 2019])
+    weights = np.array([0.05, 0.05, 0.2, 0.3, 0.4])
     cvs = np.array([])
     pred_tests = np.zeros(df_test_.shape[0])
 
     lgb_params = {
-        "num_leaves": 51,
-        "colsample_bytree": 0.8227597766170748,
-        "subsample": 0.6750591074719623,
-        "subsample_freq": 5,
-        "min_child_samples": 39,
+        "num_leaves": 27,
+        "colsample_bytree": 0.7135610132369224,
+        "subsample": 0.6847851196275857,
+        "subsample_freq": 2,
+        "min_child_samples": 42,
     }
-
     lgb_params["objective"] = "binary"
     lgb_params["boosting_type"] = "gbdt"
     lgb_params["n_estimators"] = 20000
     lgb_params["learning_rate"] = 0.05
     lgb_params["random_state"] = 42
 
-    for season, weight in zip(seasons[fold:], weights):
+    for season, weight in zip(seasons, weights):
         if verbose:
             print(f"\n Validating on season {season}")
 
@@ -90,18 +93,18 @@ def lgb_kfold_model(
 
     print(f"\n Local CV is {np.sum(weights * cvs):.5f}")
 
-    # pred_test = np.mean(pred_tests, 0)
     return pred_tests
 
 
 def xgb_kfold_model(
     fold: int, df: pd.DataFrame, df_test_: pd.DataFrame = None, verbose: int = 1
 ) -> np.ndarray:
-    seasons = df["Season"].unique()
-    cvs = []
-    pred_tests = []
+    seasons = np.array([2015, 2016, 2017, 2018])
+    weights = np.array([0.05, 0.05, 0.8, 0.1])
+    cvs = np.array([])
+    pred_tests = np.zeros(df_test_.shape[0])
 
-    for season in seasons[fold:]:
+    for season, weight in zip(seasons, weights):
         if verbose:
             print(f"\n Validating on season {season}")
 
@@ -114,12 +117,12 @@ def xgb_kfold_model(
         )
 
         xgb_params = {
-            "max_depth": 19,
-            "learning_rate": 0.31185743154279877,
-            "gamma": 8.980086955793565,
-            "subsample": 0.7985315878532397,
-            "min_child_weight": 1,
-            "colsample_bytree": 0.5,
+            "max_depth": 14,
+            "learning_rate": 0.5804028765237268,
+            "gamma": 0.00611038992000045,
+            "subsample": 0.976847493220672,
+            "min_child_weight": 31,
+            "colsample_bytree": 0.2,
         }
         xgb_params["objective"] = "binary:logistic"
         xgb_params["eval_metric"] = "logloss"
@@ -144,17 +147,16 @@ def xgb_kfold_model(
         if df_test is not None:
             pred_test = model.predict_proba(df_test[features])[:, 1]
 
-        pred_tests.append(pred_test)
+        pred_tests += weight * pred_test
         loss = log_loss(df_val[target].values, pred)
-        cvs.append(loss)
+        cvs = np.append(cvs, loss)
 
         if verbose:
             print(f"\t -> Scored {loss:.5f}")
 
-    print(f"\n Local CV is {np.mean(cvs):.5f}")
+    print(f"\n Local CV is {np.sum(weights * cvs):.5f}")
 
-    pred_test = np.mean(pred_tests, 0)
-    return pred_test
+    return pred_tests
 
 
 def logistic_kfold_model(
@@ -164,7 +166,7 @@ def logistic_kfold_model(
     cvs = []
     pred_tests = np.zeros(df_test_.shape[0])
     weights = [0.1, 0.1, 0.1, 0.05, 0.65]
-    for season, weight in zip(seasons[fold:], weights):
+    for season, weight in zip(seasons, weights):
         if verbose:
             print(f"\n Validating on season {season}")
 

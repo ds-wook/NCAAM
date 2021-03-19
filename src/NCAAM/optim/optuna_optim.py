@@ -22,6 +22,9 @@ features = [
     "OrdinalRankDiff",
     "WinRatioDiff",
     "GapAvgDiff",
+    "ratingA",
+    "ratingB",
+    "Prob",
 ]
 target = "WinA"
 
@@ -40,18 +43,18 @@ def objective(
         "learning_rate": 0.05,
         "random_state": 42,
         "num_leaves": trial.suggest_int("num_leaves", 10, 100),
-        # "reg_alpha": trial.suggest_loguniform("reg_alpha", 1e-3, 10.0),
-        # "reg_lambda": trial.suggest_loguniform("reg_lambda", 1e-3, 10.0),
+        "reg_alpha": trial.suggest_loguniform("reg_alpha", 1e-3, 10.0),
+        "reg_lambda": trial.suggest_loguniform("reg_lambda", 1e-3, 10.0),
         "colsample_bytree": trial.suggest_uniform("colsample_bytree", 0.4, 1.0),
         "subsample": trial.suggest_uniform("subsample", 0.4, 1.0),
         "subsample_freq": trial.suggest_int("subsample_freq", 1, 7),
         "min_child_samples": trial.suggest_int("min_child_samples", 10, 100),
     }
-    seasons = df["Season"].unique()
+    seasons = np.array([2015, 2016, 2017, 2018, 2019])
     cvs = np.array([])
     pred_tests = []
 
-    for season in seasons[12:]:
+    for season in seasons:
         df_train = df[df["Season"] < season].reset_index(drop=True).copy()
         df_val = df[df["Season"] == season].reset_index(drop=True).copy()
         df_train, df_val, df_test = rescale(features, df_train, df_val, df_test)
@@ -82,7 +85,7 @@ def objective(
         loss = log_loss(df_val[target].values, pred)
         cvs = np.append(cvs, loss)
 
-    weights = np.array([0.05, 0.05, 0.25, 0.05, 0.6])
+    weights = np.array([0.05, 0.05, 0.1, 0.1, 0.7])
     loss = np.sum(weights * cvs)
 
     return loss
@@ -111,7 +114,7 @@ def xgb_objective(
     }
 
     seasons = df["Season"].unique()
-    cvs = []
+    cvs = np.array([])
     pred_tests = []
 
     for season in seasons[12:]:
@@ -139,7 +142,9 @@ def xgb_objective(
 
         pred_tests.append(pred_test)
         loss = log_loss(df_val[target].values, pred)
-        cvs.append(loss)
-        loss = np.mean(cvs)
+        cvs = np.append(cvs, loss)
+
+    weights = np.array([0.05, 0.05, 0.25, 0.05, 0.6])
+    loss = np.sum(weights * cvs)
 
     return loss

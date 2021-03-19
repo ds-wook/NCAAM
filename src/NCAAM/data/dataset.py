@@ -6,12 +6,11 @@ from data.fea_eng import (
     get_round,
     treat_seed,
     add_loosing_matches,
-    delete_leaked_from_df_train,
 )
 
 
 def load_dataset() -> Tuple[pd.DataFrame, pd.DataFrame]:
-    path = "../../input/ncaam-march-mania-2021/"
+    path = "../../input/ncaam-march-mania-2021/MDataFiles_Stage2/"
 
     df_seeds = pd.read_csv(path + "MNCAATourneySeeds.csv")
 
@@ -87,8 +86,8 @@ def load_dataset() -> Tuple[pd.DataFrame, pd.DataFrame]:
     df_features_season.drop(
         ["NumWins", "NumLosses", "GapWins", "GapLosses"], axis=1, inplace=True
     )
+
     df_tourney_results = pd.read_csv(path + "MNCAATourneyCompactResults.csv")
-    df_test = pd.read_csv(path + "MSampleSubmissionStage1.csv")
     df_tourney_results.drop(["NumOT", "WLoc"], axis=1, inplace=True)
     df_tourney_results["Round"] = df_tourney_results["DayNum"].apply(get_round)
 
@@ -222,8 +221,12 @@ def load_dataset() -> Tuple[pd.DataFrame, pd.DataFrame]:
     df["WinRatioDiff"] = df["WinRatioA"] - df["WinRatioB"]
     df["GapAvgDiff"] = df["GapAvgA"] - df["GapAvgB"]
     df["ScoreDiff"] = df["ScoreA"] - df["ScoreB"]
+    df["ratingA"] = 100 - 4 * np.log1p(df["OrdinalRankA"]) - df["OrdinalRankA"] / 22
+    df["ratingB"] = 100 - 4 * np.log1p(df["OrdinalRankB"]) - df["OrdinalRankB"] / 22
+    df["Prob"] = 1 / (1 + 10 ** ((df["ratingB"] - df["ratingA"]) / 15))
     df["WinA"] = (df["ScoreDiff"] > 0).astype(int)
 
+    df_test = pd.read_csv(path + "MSampleSubmissionStage2.csv")
     df_test["Season"] = df_test["ID"].apply(lambda x: int(x.split("_")[0]))
     df_test["TeamIdA"] = df_test["ID"].apply(lambda x: int(x.split("_")[1]))
     df_test["TeamIdB"] = df_test["ID"].apply(lambda x: int(x.split("_")[2]))
@@ -319,5 +322,12 @@ def load_dataset() -> Tuple[pd.DataFrame, pd.DataFrame]:
     df_test["OrdinalRankDiff"] = df_test["OrdinalRankA"] - df_test["OrdinalRankB"]
     df_test["WinRatioDiff"] = df_test["WinRatioA"] - df_test["WinRatioB"]
     df_test["GapAvgDiff"] = df_test["GapAvgA"] - df_test["GapAvgB"]
+    df_test["ratingA"] = (
+        100 - 4 * np.log1p(df_test["OrdinalRankA"]) - df_test["OrdinalRankA"] / 22
+    )
+    df_test["ratingB"] = (
+        100 - 4 * np.log1p(df_test["OrdinalRankB"]) - df_test["OrdinalRankB"] / 22
+    )
+    df_test["Prob"] = 1 / (1 + 10 ** ((df_test["ratingB"] - df_test["ratingA"]) / 15))
 
     return df, df_test
