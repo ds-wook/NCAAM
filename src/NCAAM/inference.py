@@ -12,10 +12,13 @@ if __name__ == "__main__":
     args = parse.parse_args()
     path = "../../input/ncaam-march-mania-2021/MDataFiles_Stage2/"
     winner_solution = pd.read_csv("../../submission/MPred_1.csv")
+    winner_solution2 = pd.read_csv("../../submission/logistic.csv")
     my_solution = pd.read_csv("../../submission/lgbm_weights_prob2.csv")
     sub = pd.read_csv(path + "MSampleSubmissionStage2.csv")
 
     sub["Pred"] = np.average(
-        [winner_solution["Pred"], my_solution["Pred"]], axis=0, weights=[0.5, 0.5]
+        [winner_solution["Pred"], winner_solution2["Pred"], my_solution["Pred"]],
+        axis=0,
+        weights=[0.3, 0.4, 0.3],
     )
     sub.to_csv(args.path + args.file, index=False)
