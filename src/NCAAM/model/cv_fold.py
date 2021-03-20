@@ -26,7 +26,6 @@ features = [
     "ratingA",
     "ratingB",
     "Prob",
-    # "win_prob",
 ]
 target = "WinA"
 
